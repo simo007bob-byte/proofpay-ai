@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ProofPay Mission Control — Evidence Constellation</title>
+<style>
+:root{--bg:#050b18;--ink:#e6f1ff;--mute:#8aa3c2;--ok:#4ef2b5;--act:#5cc8ff;--wait:#f5c451;--bad:#ff6b8a;--unk:#6b7a90;font-family:Inter,"Segoe UI",system-ui,Arial,sans-serif;color:var(--ink);background:var(--bg);color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;background:radial-gradient(1200px 600px at 20% -10%,#14305a 0,transparent 60%),radial-gradient(900px 500px at 110% 10%,#2a1450 0,transparent 55%),var(--bg)}
+a{color:var(--act)}
+.skip{position:absolute;left:-999px}.skip:focus{left:12px;top:12px;background:#fff;color:#000;padding:8px;z-index:9}
+header{display:flex;flex-wrap:wrap;gap:14px;align-items:center;justify-content:space-between;padding:18px 28px;border-bottom:1px solid #1b2c48}
+.brand{font-weight:800;font-size:20px;letter-spacing:-.4px}.brand b{color:var(--ok)}
+.brand small{display:block;font-size:11px;letter-spacing:2px;color:var(--mute);text-transform:uppercase;font-weight:700}
+.mode{font-weight:850;letter-spacing:1px;text-transform:uppercase;font-size:13px;padding:10px 14px;border-radius:10px;border:2px solid var(--wait);color:var(--wait);background:#2a210a}
+.mode.genuine{border-color:var(--ok);color:var(--ok);background:#06281f}
+.cta{display:inline-block;font-weight:750;padding:10px 14px;border-radius:10px;background:var(--ok);color:#03241a;text-decoration:none}
+.cta:focus-visible,button:focus-visible,input:focus-visible,a:focus-visible{outline:3px solid #fff;outline-offset:3px}
+main{max-width:1240px;margin:auto;padding:22px 24px 48px;display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:22px}
+h1{font-size:clamp(24px,3.4vw,38px);margin:0 0 4px;letter-spacing:-1px}
+.lede{color:var(--mute);margin:0 0 14px;max-width:720px;line-height:1.5}
+.panel{background:rgba(12,24,44,.78);border:1px solid #1f3558;border-radius:16px;padding:16px}
+.stage{position:relative;aspect-ratio:1000/520;width:100%;border-radius:16px;overflow:hidden;background:radial-gradient(circle at 50% 50%,#0f2142 0,#060d1d 70%);border:1px solid #1f3558}
+.stage::before{content:"";position:absolute;inset:-20px;background-image:radial-gradient(1px 1px at 12% 22%,#ffffff88 50%,transparent 51%),radial-gradient(1px 1px at 72% 12%,#ffffff66 50%,transparent 51%),radial-gradient(1.5px 1.5px at 42% 82%,#ffffff77 50%,transparent 51%),radial-gradient(1px 1px at 88% 72%,#ffffff55 50%,transparent 51%),radial-gradient(1px 1px at 28% 62%,#ffffff66 50%,transparent 51%),radial-gradient(1px 1px at 58% 38%,#ffffff44 50%,transparent 51%);animation:drift 40s linear infinite alternate}
+svg.links{position:absolute;inset:0;width:100%;height:100%}
+.link{fill:none;stroke:#2a3d5c;stroke-width:3;stroke-linecap:round}
+.link.live{stroke:var(--ok);stroke-dasharray:10 12;animation:flow 1.6s linear infinite}
+.link.blocked{stroke:var(--bad);stroke-dasharray:4 10}
+.node{position:absolute;transform:translate(-50%,-50%);width:clamp(66px,11vw,116px);aspect-ratio:1;border-radius:50%;border:3px solid var(--unk);background:radial-gradient(circle at 35% 30%,#1f3a66,#0a1630 70%);color:var(--ink);font:inherit;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:4px;box-shadow:0 0 0 6px #ffffff08}
+.node.hero{width:clamp(80px,13vw,140px)}
+.node .ic{font-size:clamp(16px,2.4vw,26px);line-height:1}
+.node .nm{font-size:clamp(9px,1.1vw,12px);font-weight:800;letter-spacing:.5px;text-transform:uppercase}
+.node .st{position:absolute;top:calc(100% + 8px);left:50%;transform:translateX(-50%);white-space:nowrap;font-size:clamp(9px,1vw,12px);font-weight:750;padding:3px 8px;border-radius:20px;background:#0a1630;border:1px solid currentColor;color:var(--mute)}
+[data-node=milestone]{left:10%;top:50%}[data-node=evidence]{left:30%;top:26.9%}[data-node=ai]{left:50%;top:50%}[data-node=human]{left:70%;top:26.9%}[data-node=paypal]{left:90%;top:50%}
+.node[data-state=done]{border-color:var(--ok);box-shadow:0 0 22px #4ef2b566}.node[data-state=done] .st,#dState[data-state=done]{color:var(--ok)}
+.node[data-state=active]{border-color:var(--act);animation:pulse 2.2s ease-in-out infinite}.node[data-state=active] .st,#dState[data-state=active]{color:var(--act)}
+.node[data-state=wait]{border-color:var(--wait)}.node[data-state=wait] .st,#dState[data-state=wait]{color:var(--wait)}
+.node[data-state=blocked]{border-color:var(--bad);box-shadow:0 0 22px #ff6b8a55}.node[data-state=blocked] .st,#dState[data-state=blocked]{color:var(--bad)}
+.node[aria-pressed=true]{outline:3px dashed #fff;outline-offset:6px}
+body.sim .stage{border:2px dashed var(--wait)}
+.simflag{display:none;position:absolute;top:12px;left:50%;transform:translateX(-50%);background:var(--wait);color:#231a00;font-weight:900;letter-spacing:1.5px;padding:6px 12px;border-radius:8px;font-size:12px;text-transform:uppercase;z-index:2}
+body.sim .simflag{display:block}
+.legend{display:flex;flex-wrap:wrap;gap:12px;margin-top:12px;font-size:12px;color:var(--mute)}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;vertical-align:-1px}
+.hint{font-size:12px;color:var(--mute)}
+aside{display:flex;flex-direction:column;gap:16px}
+h2{font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--mute);margin:0 0 10px}
+#dTitle{font-size:22px;margin:0 0 4px}
+#dState{font-weight:800;margin:0}
+#dLines{padding-left:18px;line-height:1.5;margin:10px 0;overflow-wrap:anywhere}
+pre{white-space:pre-wrap;word-break:break-word;background:#050b18;border:1px solid #1f3558;border-radius:10px;padding:10px;font-size:11px;max-height:220px;overflow:auto;color:#b7c9e2}
+.whatif{border:2px dashed var(--wait)}.whatif h2{color:var(--wait)}
+.whatif label{display:flex;gap:10px;align-items:flex-start;font-weight:700;cursor:pointer}
+.whatif p{font-size:13px;color:var(--mute);line-height:1.5}
+#simStatus{font-weight:800;color:var(--ink)}
+#audit{list-style:none;padding:0;margin:0;font-size:12px}#audit li{padding:6px 0;border-bottom:1px solid #1b2c48;overflow-wrap:anywhere}
+.err{color:var(--bad);font-weight:700;min-height:1em}
+@keyframes flow{to{stroke-dashoffset:-44}}
+@keyframes pulse{50%{box-shadow:0 0 0 12px #5cc8ff22,0 0 28px #5cc8ff66}}
+@keyframes drift{to{transform:translate(-12px,8px)}}
+@media (max-width:900px){main{grid-template-columns:1fr}}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+</style></head>
+<body>
+<a class="skip" href="#details">Skip to node details</a>
+<header>
+ <div class="brand">Proof<b>Pay</b> Mission Control<small>Evidence Constellation · read-only view</small></div>
+ <div id="mode" class="mode" role="status" aria-live="polite">PayPal mode: loading</div>
+ <a class="cta" href="/">Open approval workflow &rarr;</a>
+</header>
+<main>
+<section aria-labelledby="title">
+ <h1 id="title">Evidence Constellation</h1>
+ <p class="lede">Each star is a gate between finished work and payment. States are read live from <code>GET /api/state</code> every 5 seconds. This page cannot submit evidence, approve, create orders or pay. Human approval happens only in the <a href="/">existing ProofPay workflow</a>.</p>
+ <p class="err" id="err" role="alert"></p>
+ <div class="stage" id="stage">
+  <div class="simflag" aria-hidden="true">What-if simulation · not real state</div>
+  <svg class="links" viewBox="0 0 1000 520" aria-hidden="true" focusable="false">
+   <path class="link" data-from="milestone" d="M100 260 C180 260 220 140 300 140"/>
+   <path class="link" data-from="evidence" d="M300 140 C380 140 420 260 500 260"/>
+   <path class="link" data-from="ai" d="M500 260 C580 260 620 140 700 140"/>
+   <path class="link" data-from="human" d="M700 140 C780 140 820 260 900 260"/>
+  </svg>
+  <button type="button" class="node" data-node="milestone" data-state="unknown" aria-pressed="true" aria-label="Milestone: loading. Show details." aria-controls="details"><span class="ic" aria-hidden="true">&#9678;</span><span class="nm">Milestone</span><span class="st">LOADING</span></button>
+  <button type="button" class="node" data-node="evidence" data-state="unknown" aria-pressed="false" aria-label="Evidence: loading. Show details." aria-controls="details"><span class="ic" aria-hidden="true">&#9636;</span><span class="nm">Evidence</span><span class="st">LOADING</span></button>
+  <button type="button" class="node hero" data-node="ai" data-state="unknown" aria-pressed="false" aria-label="AI / Uncertainty: loading. Show details." aria-controls="details"><span class="ic" aria-hidden="true">&#10023;</span><span class="nm">AI / Uncertainty</span><span class="st">LOADING</span></button>
+  <button type="button" class="node" data-node="human" data-state="unknown" aria-pressed="false" aria-label="Human Approval: loading. Show details." aria-controls="details"><span class="ic" aria-hidden="true">&#9878;</span><span class="nm">Human Approval</span><span class="st">LOADING</span></button>
+  <button type="button" class="node" data-node="paypal" data-state="unknown" aria-pressed="false" aria-label="PayPal: loading. Show details." aria-controls="details"><span class="ic" aria-hidden="true">&#9672;</span><span class="nm">PayPal</span><span class="st">LOADING</span></button>
+ </div>
+ <div class="legend" aria-label="Legend"><span><i style="background:var(--ok)"></i>Complete (server-reported)</span><span><i style="background:var(--act)"></i>In progress</span><span><i style="background:var(--wait)"></i>Waiting</span><span><i style="background:var(--bad)"></i>Blocked / needs review</span><span><i style="background:var(--unk)"></i>Unknown</span></div>
+ <p class="hint" id="hint">Keyboard: Tab to a node, arrow keys move along the constellation, Enter or Space opens details.</p>
+</section>
+<aside>
+ <section class="panel" id="details" tabindex="-1" aria-live="polite" aria-labelledby="dHead">
+  <h2 id="dHead">Node details</h2>
+  <h3 id="dTitle">Milestone</h3>
+  <p id="dState" data-state="unknown">LOADING</p>
+  <ul id="dLines"></ul>
+  <details><summary>Raw server fields</summary><pre id="dRaw"></pre></details>
+ </section>
+ <section class="panel whatif" aria-labelledby="wiT">
+  <h2 id="wiT">What-if · SIMULATION ONLY</h2>
+  <label><input type="checkbox" id="simToggle"> Simulate: evidence is missing</label>
+  <p>Client-only projection in this browser tab. Nothing is sent to the server: no state change, no PayPal order, no capture, no payment. Uncheck to return to live state.</p>
+  <p id="simStatus" role="status">Showing LIVE server state.</p>
+ </section>
+ <section class="panel" aria-labelledby="auT">
+  <h2 id="auT">Recent audit events</h2>
+  <ul id="audit"></ul>
+ </section>
+</aside>
+</main>
+<script>
+(function(){
+'use strict';
+var ORDER=['milestone','evidence','ai','human','paypal'];
+var NAMES={milestone:'Milestone',evidence:'Evidence',ai:'AI / Uncertainty',human:'Human Approval',paypal:'PayPal'};
+var live=null,loadError='',simulate=false,selected='milestone';
+function $(id){return document.getElementById(id);}
+function btn(k){return document.querySelector('[data-node="'+k+'"]');}
+function txt(v){if(typeof v==='string')return v;if(typeof v==='number'||typeof v==='boolean')return String(v);return '';}
+function pick(o,keys){if(!o||typeof o!=='object')return undefined;for(var i=0;i<keys.length;i++){var v=o[keys[i]];if(v!==undefined&&v!==null&&v!=='')return v;}return undefined;}
+function brief(v){if(v===undefined||v===null)return '';if(Array.isArray(v))return v.map(brief).filter(Boolean).join('; ').slice(0,400);if(typeof v==='object'){try{return JSON.stringify(v).slice(0,400);}catch(e){return '';}}return txt(v).slice(0,400);}
+function node(state,status,lines,raw){return {state:state,status:status,lines:lines.filter(Boolean),raw:raw};}
+function derive(data){
+ var s=(data&&data.state)||{},c=(data&&data.capabilities)||{};
+ var m=s.milestone&&typeof s.milestone==='object'?s.milestone:{};
+ var task=txt(pick(m,['task','title','description']));
+ var amount=txt(pick(m,['amount','value'])),cur=txt(pick(m,['currency','currencyCode']));
+ var a=pick(s,['analysis','assessment','verification','aiResult','review']);
+ var ao=a&&typeof a==='object'?a:{};
+ var evid=txt(pick(s,['evidence','lastEvidence','submittedEvidence']))||txt(pick(ao,['evidence']));
+ var aStatus=(txt(pick(ao,['status','verdict','decision']))||(typeof a==='string'?a:'')).toUpperCase();
+ var conf=pick(ao,['confidence','score']),unc=pick(ao,['uncertainty','reasons','flags','issues','summary','explanation']);
+ var approved=s.humanApproved===true;
+ var p=s.payment&&typeof s.payment==='object'?s.payment:null;
+ var pStatus=p?txt(p.status).toUpperCase():'';
+ var genuine=c.payments==='PAYPAL_SANDBOX';
+ var aiCap=txt(c.ai)||'UNKNOWN';
+ var n={};
+ n.milestone=task?node('done','DEFINED',['Task: '+task.slice(0,600),amount?'Amount: '+amount+(cur?' '+cur:'')+' (server-controlled)':''],m):node('unknown','NOT FOUND',['No milestone task in server state.'],m);
+ if(evid)n.evidence=node('done','SUBMITTED',['Evidence (untrusted text): '+evid.slice(0,600)],{evidence:evid.slice(0,2000)});
+ else if(aStatus)n.evidence=node('done','ASSESSED',['Evidence was assessed; its text is not exposed by the API.'],null);
+ else n.evidence=node('wait','AWAITING',['No evidence submitted yet. Submit it in the workflow at /.'],null);
+ if(!aStatus){n.ai=node(aiCap==='NOT_CONNECTED'?'blocked':'wait',aiCap==='NOT_CONNECTED'?'AI OFFLINE':'NO RESULT',['AI capability: '+aiCap,'No assessment recorded. Nothing is shown as verified.'],a===undefined?null:a);}
+ else{var bad=/REVIEW|REJECT|FAIL|INSUFFICIENT|UNCERTAIN|BLOCK|MISSING/.test(aStatus);var good=!bad&&/PASS|VERIFIED|SUFFICIENT|ACCEPT|COMPLETE|MET|OK/.test(aStatus);
+  n.ai=node(bad?'blocked':good?'done':'active',aStatus.slice(0,24),['Server-reported status: '+aStatus,conf!==undefined?'Confidence: '+brief(conf):'',unc!==undefined?'Uncertainty / reasons: '+brief(unc):'','AI capability: '+aiCap,'AI output is advisory only; a human decides.'],a);}
+ n.human=approved?node('done','APPROVED',['A human approved this milestone in the workflow at /.'],{humanApproved:true}):node(n.ai.state==='done'?'active':'wait','PENDING',['No human approval recorded. Approve only in the workflow at /.'],{humanApproved:s.humanApproved===undefined?null:s.humanApproved});
+ var modeTxt=genuine?'Genuine PayPal Sandbox (configured credentials, sandbox money only)':'SIMULATION ONLY: PayPal Sandbox not configured ('+(txt(c.payments)||'unknown')+')';
+ var pMode=p?(txt(p.mode)||txt(c.payments)):'';
+ if(pStatus==='COMPLETED')n.paypal=node('done','PAID',['Capture COMPLETED as reported by the server.','Order: '+txt(p.id),'Mode: '+pMode,modeTxt],p);
+ else if(p)n.paypal=node('active',('ORDER '+(pStatus||'CREATED')).slice(0,20),['Order exists but is not captured. Not paid.','Order: '+txt(p.id),'Mode: '+pMode,modeTxt],p);
+ else n.paypal=node(approved?'active':'wait',approved?'READY':'LOCKED',[approved?'Approved; an order can be created in the workflow at /.':'Locked until human approval.','No order, no capture, not paid.',modeTxt],null);
+ var audit=Array.isArray(s.audit)?s.audit:Array.isArray(s.auditLog)?s.auditLog:[];
+ return {nodes:n,genuine:genuine,audit:audit};
+}
+function unknownModel(){var n={};ORDER.forEach(function(k){n[k]=node('unknown','NO DATA',[loadError?'Live state unavailable: '+loadError:'Loading live state...','Nothing is assumed while state is unknown.'],null);});return {nodes:n,genuine:false,audit:[]};}
+function project(model){
+ var n={milestone:model.nodes.milestone};
+ n.evidence=node('blocked','MISSING',['SIMULATED: evidence is missing.'],null);
+ n.ai=node('blocked','CANNOT ASSESS',['SIMULATED: no evidence means nothing to assess; AI cannot verify absent work.'],null);
+ n.human=node('wait','NOT ELIGIBLE',['SIMULATED: a reviewer would see no proof and should not approve.'],null);
+ n.paypal=node('wait','LOCKED',['SIMULATED: no approval, so no order and no payment.','No request was sent; live state is unchanged.'],null);
+ return {nodes:n,genuine:model.genuine,audit:model.audit};
+}
+function model(){var m=live?derive(live):unknownModel();return simulate?project(m):m;}
+function showDetails(m){
+ var d=m.nodes[selected];
+ $('dTitle').textContent=NAMES[selected]+(simulate?' (what-if)':'');
+ $('dState').textContent=d.status+(simulate&&selected!=='milestone'?' - SIMULATED':'');
+ $('dState').setAttribute('data-state',d.state);
+ var ul=$('dLines');ul.textContent='';
+ d.lines.forEach(function(l){var li=document.createElement('li');li.textContent=l;ul.appendChild(li);});
+ var raw='';if(d.raw!==null&&d.raw!==undefined){try{raw=JSON.stringify(d.raw,null,2);}catch(e){raw='';}}
+ $('dRaw').textContent=raw?raw.slice(0,3000):'(no raw server fields for this node)';
+}
+function render(){
+ var m=model();
+ document.body.classList.toggle('sim',simulate);
+ ORDER.forEach(function(k){var b=btn(k),d=m.nodes[k];b.setAttribute('data-state',d.state);b.querySelector('.st').textContent=d.status;
+  b.setAttribute('aria-label',NAMES[k]+': '+d.status+(simulate&&k!=='milestone'?' (simulated)':'')+'. Show details.');b.setAttribute('aria-pressed',String(k===selected));});
+ var links=document.querySelectorAll('.link');
+ for(var i=0;i<links.length;i++){var from=links[i].getAttribute('data-from');var f=m.nodes[from],t=m.nodes[ORDER[ORDER.indexOf(from)+1]];
+  links[i].setAttribute('class','link'+(f.state==='done'?' live':t.state==='blocked'?' blocked':''));}
+ var mode=$('mode');mode.className='mode'+(m.genuine?' genuine':'');
+ mode.textContent=!live?'PayPal mode: unknown':m.genuine?'Genuine PayPal Sandbox configured':'SIMULATION ONLY - PayPal Sandbox not configured';
+ showDetails(m);
+ var ol=$('audit');ol.textContent='';var items=m.audit.slice(-6).reverse();
+ if(!items.length){var e=document.createElement('li');e.textContent='No audit events yet.';ol.appendChild(e);}
+ items.forEach(function(a){var li=document.createElement('li');var o=a&&typeof a==='object'?a:{};
+  li.textContent=[txt(pick(o,['at','time','timestamp','ts'])),txt(pick(o,['type','event','action','name']))||brief(a)].filter(Boolean).join('  ');ol.appendChild(li);});
+ $('simStatus').textContent=simulate?'WHAT-IF SIMULATION ACTIVE: projection only, live server state untouched.':'Showing LIVE server state.';
+ $('err').textContent=loadError?'Live state error: '+loadError:'';
+}
+function select(k,focus){selected=k;render();if(focus)btn(k).focus();}
+ORDER.forEach(function(k,i){var b=btn(k);
+ b.addEventListener('click',function(){select(k);});
+ b.addEventListener('keydown',function(e){var j=-1;
+  if(e.key==='ArrowRight'||e.key==='ArrowDown')j=(i+1)%ORDER.length;
+  else if(e.key==='ArrowLeft'||e.key==='ArrowUp')j=(i+ORDER.length-1)%ORDER.length;
+  else if(e.key==='Home')j=0;else if(e.key==='End')j=ORDER.length-1;
+  if(j>=0){e.preventDefault();select(ORDER[j],true);}});
+});
+$('simToggle').addEventListener('change',function(e){simulate=e.target.checked===true;render();});
+function load(){
+ fetch('/api/state',{cache:'no-store',credentials:'same-origin',headers:{Accept:'application/json'}})
+  .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();})
+  .then(function(d){live=d;loadError='';render();})
+  .catch(function(e){loadError=txt(e&&e.message)||'network error';render();});
+}
+render();load();setInterval(load,5000);
+})();
+</script>
+</body></html>

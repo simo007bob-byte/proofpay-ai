@@ -88,7 +88,7 @@ Official rules: https://paypalaihackathon.devpost.com/rules
 - [x] Original ProofPay browser application -> Sandbox buyer approval -> original-app capture -> verified provider receipt, 27 October 2026
 - [ ] Release gates in docs/RELEASE_GATES.md passed and signed off by an operator
 - [ ] Public OSS repository without private SKYNET data or secrets
-- [ ] Public YouTube video under three minutes
+- [x] Public YouTube demo video (2:15): https://www.youtube.com/watch?v=ndGIOVZBhBc
 - [ ] Devpost submission before the deadline in the official rules
 - [ ] Production security review
 

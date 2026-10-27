@@ -1,12 +1,12 @@
 # Devpost Submission — ProofPay AI
 
-**STATUS: prepared text only; not yet published or submitted.**
+**STATUS: Officially submitted to the PayPal AI Hackathon on 27 October 2026.** Devpost confirmed: "Project submitted!".
 
 ## Project name
-ProofPay AI — Evidence First. Human Approval. PayPal.
+ProofPay AI — Evidence First, Payment Second
 
 ## Tagline
-Local AI reviews delivery evidence. Humans approve. PayPal Sandbox confirms payment.
+Local AI reviews milestone delivery evidence before payment. Humans make the final decision, and PayPal Sandbox handles secure test checkout.
 
 ## Inspiration
 Freelancers, agencies, and cross-border service teams often face the same challenge at milestone handoff: how can a buyer judge whether the work matches the original agreement before paying? A checkout button does not answer that question. ProofPay puts the assessment of work evidence before the payment decision.
@@ -40,6 +40,6 @@ The public open-source repository must provide complete setup instructions and a
 ## Required URLs — verified 27 October 2026
 - Public source repository (MIT): https://github.com/simo007bob-byte/proofpay-ai
 - Public YouTube demo (2:15): https://www.youtube.com/watch?v=ndGIOVZBhBc
-- Public Devpost competition submission: NOT YET SUBMITTED — submit through https://paypalaihackathon.devpost.com/
+- Public Devpost competition submission (confirmed): https://devpost.com/software/proofpay-ai-evidence-first-payment-second
 
-**Submission requires Devpost account access and explicit final Submit action. Do not claim the competition entry is complete before a Devpost submission confirmation or published Devpost project URL is verified.**
+**Submission confirmation:** Devpost displayed "Project submitted!" and opened the public project page on 27 October 2026. The project can still be edited before the contest deadline. Publication does not establish that all independent release-gate checks have passed.

@@ -37,9 +37,11 @@ The next steps are stronger capture-receipt reconciliation, authenticated tenant
 ## Judge access / setup
 The public open-source repository must provide complete setup instructions and a permissive license. Judges can run the app locally with `npm ci`, `npm test`, and `npm start` in simulated payment mode, or supply their own free PayPal Developer Sandbox merchant/buyer test accounts for a genuine integration test. Do not use Live credentials or real funds.
 
-## Required URLs — not yet available
-- Public source repository: pending verification
-- Public YouTube demo (under 3 minutes): pending verification
-- Public Devpost competition submission: pending verification
+## Required URLs
+- Public source repository (confirmed public, MIT license): https://github.com/simo007bob-byte/proofpay-ai
+- Public YouTube demo (under 3 minutes): pending upload and verification
+- Public Devpost competition submission: pending submission and confirmation
 
-**Do not submit this copy or claim those URLs exist until they are independently checked.**
+Submit at https://paypalaihackathon.devpost.com/ and confirm the YouTube video is set to Public before final submission.
+
+**Only the repository URL is verified. The YouTube and Devpost URLs must not be claimed until independently checked.**

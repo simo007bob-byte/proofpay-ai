@@ -1,6 +1,6 @@
 # ProofPay AI — Verified Work. Confident Payments.
 
-**Status:** working local prototype with real CPU-run transformer AI (an embedding model). **PayPal Developer Sandbox: VERIFIED for an authorized private test setup.** In October 2026, the SKYNET integration created a real Sandbox order through PayPal Orders v2, received a Sandbox buyer's approval, captured a test payment, and independently verified its completed status with PayPal. Separately, the original ProofPay app was exercised in a real browser through local AI, the human approval gate, and a genuine Sandbox order creation; **the actual ProofPay app's second Sandbox order was also approved by a separate test buyer, captured using its original app endpoint, and verified COMPLETED by PayPal on 27 October 2026.** A fresh checkout with no credentials still runs in explicitly simulated mode. **This project has not yet been submitted to the competition.** No actual funds were transferred.
+**Status:** working local prototype with real CPU-run transformer AI (an embedding model). **PayPal Developer Sandbox: VERIFIED for an authorized private test setup.** In October 2026, the SKYNET integration created a real Sandbox order through PayPal Orders v2, received a Sandbox buyer's approval, captured a test payment, and independently verified its completed status with PayPal. Separately, the original ProofPay app was exercised in a real browser through local AI, the human approval gate, and a genuine Sandbox order creation; **the actual ProofPay app's second Sandbox order was also approved by a separate test buyer, captured using its original app endpoint, and verified COMPLETED by PayPal on 27 October 2026.** A fresh checkout with no credentials still runs in explicitly simulated mode. **Submitted to the PayPal AI Hackathon on 27 October 2026:** https://devpost.com/software/proofpay-ai-evidence-first-payment-second . No actual funds were transferred.
 
 ProofPay belongs to the existing Hermes-SKYNET project. This repository is a working prototype. It is not proof that SKYNET agents (Astra Planner, Testsmith, Builder) autonomously produced a finished hackathon entry.
 
@@ -89,7 +89,7 @@ Official rules: https://paypalaihackathon.devpost.com/rules
 - [ ] Release gates in docs/RELEASE_GATES.md passed and signed off by an operator
 - [ ] Public OSS repository without private SKYNET data or secrets
 - [x] Public YouTube demo video (2:15): https://www.youtube.com/watch?v=ndGIOVZBhBc
-- [ ] Devpost submission before the deadline in the official rules
+- [x] Devpost submission completed 27 October 2026: https://devpost.com/software/proofpay-ai-evidence-first-payment-second
 - [ ] Production security review
 
 No prize or placement is guaranteed.

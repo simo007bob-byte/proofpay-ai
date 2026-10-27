@@ -1,0 +1,17 @@
+{
+  "name": "proofpay-ai",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Hermes-SKYNET PayPal AI Hackathon proof-of-delivery to sandbox checkout prototype",
+  "scripts": {
+    "start": "node src/server.mjs",
+    "test": "node --test test/*.test.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@huggingface/transformers": "4.3.1"
+  }
+}

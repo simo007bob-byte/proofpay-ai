@@ -1,0 +1,44 @@
+name: Assemble verified ProofPay demo video
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'release/video-parts/**'
+      - '.github/workflows/assemble-proofpay-video.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  assemble:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify and reconstruct original MP4
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib
+          pieces=[Path('release/video-parts/part%02d.bin'%i) for i in range(8)]
+          assert all(p.exists() for p in pieces), 'Missing a video chunk'
+          f=Path('release/ProofPay_AI_Hackathon_Judge_Video_2m15s.mp4')
+          with f.open('wb') as out:
+              for p in pieces:
+                  with p.open('rb') as inp:
+                      while True:
+                          b=inp.read(65536)
+                          if not b: break
+                          out.write(b)
+          actual=hashlib.sha256(f.read_bytes()).hexdigest()
+          expected='28c36871af32de4cabf6389ff7790ec790de7870c74ad8a22ea84bd70698b28a'
+          assert actual==expected, 'Video checksum mismatch'
+          assert f.stat().st_size==3458979, 'Video size mismatch'
+          print('Verified full ProofPay MP4, SHA-256:',actual)
+          PY
+      - name: Publish MP4 to public repository
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add release/ProofPay_AI_Hackathon_Judge_Video_2m15s.mp4
+          if git diff --cached --quiet; then echo 'Video already present'; exit 0; fi
+          git commit -m 'Publish verified 2m15s ProofPay AI demo MP4'
+          git push origin HEAD:main

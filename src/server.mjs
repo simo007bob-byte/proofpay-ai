@@ -1,0 +1,139 @@
+import http from 'node:http';
+import { readFileSync, writeFileSync, mkdirSync, renameSync, chmodSync, existsSync } from 'node:fs';
+import { resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { createHash } from 'node:crypto';
+import { initialState, analyze, assessEvidence, humanApprove, canCreateOrder, sanitizePublic, newAudit, AppError } from './core.mjs';
+import { PayPalSandbox } from './paypal.mjs';
+import { LocalAI } from './ai.mjs';
+import { EmbeddingAI } from './embedding-ai.mjs';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const HTML = readFileSync(resolve(HERE,'../web/index.html'));
+const MISSION_HTML = readFileSync(resolve(HERE,'../web/mission-control.html'),'utf8');
+// Mission control is read-only; its single inline script is pinned by hash under a strict CSP.
+const MISSION_SCRIPT = (/<script>([\s\S]*?)<\/script>/.exec(MISSION_HTML)||[])[1]||'';
+const MISSION_CSP = "default-src 'none'; script-src 'sha256-"+createHash('sha256').update(MISSION_SCRIPT,'utf8').digest('base64')+
+  "'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
+const STATE_FILE = resolve(process.env.DATA_FILE||resolve(HERE,'../data/state.json'));
+const PORT = Number(process.env.PORT||8777);
+const HOST = process.env.HOST||'127.0.0.1'; // Never expose internet by default.
+if(!['127.0.0.1','localhost'].includes(HOST)) throw new Error('PUBLIC_BIND_DISABLED');
+const paypal=new PayPalSandbox({clientId:process.env.PAYPAL_CLIENT_ID,clientSecret:process.env.PAYPAL_CLIENT_SECRET});
+const mode=String(process.env.AI_PROVIDER||'EMBEDDINGS').toUpperCase();
+const ai=mode==='DISABLED'?{enabled:false,evaluate:async()=>null}:
+  mode==='OLLAMA'?new LocalAI({model:process.env.OLLAMA_MODEL||'',baseURL:process.env.OLLAMA_BASE_URL||'http://127.0.0.1:11434'}):new EmbeddingAI();
+let state;
+try {state=JSON.parse(readFileSync(STATE_FILE,'utf8'));} catch(e) {
+  if(e.code && e.code!=='ENOENT') throw e;
+  state=initialState();
+}
+function persist(){
+  mkdirSync(dirname(STATE_FILE),{recursive:true,mode:0o700});
+  const tmp=STATE_FILE+'.tmp';
+  writeFileSync(tmp,JSON.stringify(state,null,2),{mode:0o600});
+  renameSync(tmp,STATE_FILE);chmodSync(STATE_FILE,0o600);
+}
+persist();
+function send(res,status,data){
+  res.writeHead(status,{'Content-Type':'application/json; charset=utf-8',
+    'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY'});
+  res.end(JSON.stringify(data));
+}
+async function body(req){
+  if(!String(req.headers['content-type']||'').startsWith('application/json'))
+    throw new AppError('JSON requests only',415);
+  let text='';
+  for await (const chunk of req) {
+    text+=chunk;
+    if(text.length>12000) throw new AppError('Request too large',413);
+  }
+  try{return JSON.parse(text||'{}');} catch {throw new AppError('Invalid JSON body');}
+}
+function assertOrigin(req) {
+  const origin=req.headers.origin;
+  if(!origin) return;
+  let u;
+  try{u=new URL(origin);}catch{throw new AppError('Invalid origin',403);}
+  if(!['127.0.0.1','localhost'].includes(u.hostname) || u.port!==String(PORT))
+    throw new AppError('Cross-origin access blocked',403);
+}
+function current() {
+  return {state:sanitizePublic(state),
+    capabilities:{payments:paypal.mode,ai:ai.enabled?(mode==='OLLAMA'?'LOCAL_AI_OLLAMA':'LOCAL_AI_TRANSFORMER'):'NOT_CONNECTED',
+      openaiPaidAPI:false,automaticPayment:false,
+      needSandboxCredentials:paypal.mode!=='PAYPAL_SANDBOX',
+      clientId:paypal.clientId||null}};
+}
+let busy=false;
+export const server=http.createServer(async (req,res)=>{
+  try {
+    const path=new URL(req.url,'http://127.0.0.1').pathname;
+    if(req.method==='GET' && path==='/'){
+      res.writeHead(200,{'Content-Type':'text/html; charset=utf-8',
+        'Cache-Control':'no-store','X-Frame-Options':'DENY'});
+      return res.end(HTML);
+    }
+    if(req.method==='GET' && path==='/mission-control'){
+      res.writeHead(200,{'Content-Type':'text/html; charset=utf-8',
+        'Cache-Control':'no-store','X-Frame-Options':'DENY','X-Content-Type-Options':'nosniff',
+        'Referrer-Policy':'no-referrer','Content-Security-Policy':MISSION_CSP});
+      return res.end(MISSION_HTML);
+    }
+    if(req.method==='GET' && path==='/api/state')return send(res,200,current());
+    if(req.method!=='POST')return send(res,404,{error:'Not found'});
+    assertOrigin(req);
+    if(busy)throw new AppError('Another state update is in progress',409);
+    busy=true;
+    try{
+      const data=await body(req);
+      if(path==='/api/analyze'){
+        const evidence=String(data.evidence||'');
+        // Evidence is untrusted and never allowed to mutate our instructions.
+        const prescreen=assessEvidence(state.milestone.task,evidence);
+        const result=prescreen.status==='REVIEW_REQUIRED'?null:await ai.evaluate(state.milestone.task,evidence);
+        analyze(state,evidence,result);persist();
+        return send(res,200,current());
+      }
+      if(path==='/api/approve'){
+        humanApprove(state,data.approved);persist();
+        return send(res,200,current());
+      }
+      if(path==='/api/create-order'){
+        canCreateOrder(state);
+        // Server controls currency and amount; never accept either from client.
+        const order=await paypal.createOrder(state);
+        state.payment={...order,createdAt:new Date().toISOString()};
+        newAudit(state,'ORDER_CREATED',{mode:order.mode,status:order.status});
+        persist();return send(res,200,current());
+      }
+      if(path==='/api/capture'){
+        if(!state.humanApproved||!state.payment)throw new AppError('Order missing',403);
+        if(state.payment.status==='COMPLETED')throw new AppError('Already completed',409);
+        if(data.orderId!==state.payment.id)throw new AppError('Order mismatch',409);
+        // In real sandbox mode, only buyer approval via PayPal JS onApprove
+        // should call this endpoint. Server-side validation with PayPal follows.
+        const confirmed=await paypal.captureOrder(state.payment);
+        state.payment.status=confirmed.status;
+        newAudit(state,'SANDBOX_CAPTURE_CONFIRMED',{mode:state.payment.mode});
+        persist();return send(res,200,current());
+      }
+      if(path==='/api/reset'){
+        if(data.confirm!==true)throw new AppError('Explicit demo reset required',422);
+        state=initialState();persist();return send(res,200,current());
+      }
+      return send(res,404,{error:'Not found'});
+    }finally{busy=false;}
+  } catch(error) {
+    const status=error instanceof AppError?error.status:500;
+    if(status===500)console.error('Internal error',error?.name||'Error');
+    send(res,status,{error:status===500?'Internal server error':error.message});
+  }
+});
+if(process.argv[1]&&fileURLToPath(import.meta.url)===resolve(process.argv[1])){
+  server.listen(PORT,HOST,()=>{
+    console.log('PROOFPAY_LOOPBACK http://'+HOST+':'+PORT);
+    console.log('Mission control: http://'+HOST+':'+PORT+'/mission-control');
+    console.log('PayPal:',paypal.mode,'AI:',ai.enabled?mode:'NOT_CONNECTED');
+  });
+}

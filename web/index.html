@@ -8,16 +8,16 @@
 <section class="hero"><div class="hero-inner"><div><div class="eyebrow">Verified work. Confident payments.</div><h1>Evidence first.<br/><span>Payment second.</span></h1><p>An agent-assisted approval flow for freelancers, service teams and cross-border projects. Review deliverable evidence, approve the milestone, then pay securely through PayPal.</p><div class="pills"><span class="pill">Human in control</span><span class="pill">PayPal sandbox</span><span class="pill">Auditable decisions</span><span class="pill">Optional local AI</span></div></div><div class="hero-metric"><div class="small-title" style="color:#9ec8df">Current milestone</div><strong id="heroAmount">€29.00</strong><small>Demo amount · no real payment</small><div style="margin-top:22px;color:#7fe1be;font-size:12px;font-weight:750">● <span id="heroStatus">Awaiting evidence</span></div></div></div></section></header>
 <main><div class="notice" id="modeBanner">Loading verified configuration …</div>
 <div class="grid"><section>
-<div class="panel"><div class="row"><div><h2>1. Project milestone</h2><p class="sub">The agreed deliverable, visible to both parties.</p></div><span class="chip">Milestone #001</span></div><div class="row"><div><div class="muted">SAMPLE CONTRACT VALUE</div><div class="price" id="amount">€29.00</div></div><div class="muted">EUR · demo only</div></div><div class="divider"></div><div class="small-title">Work to be completed</div><div class="box" id="requirement"></div><p class="sub" style="margin-bottom:0;margin-top:14px">Fictional seller and buyer. No funds are held in escrow; this is an approval-assisted checkout demo.</p></div>
+<div class="panel"><div class="row"><div><h2>1. Project milestone</h2><p class="sub">The agreed deliverable, visible to both parties.</p></div><span class="chip">Milestone #001</span></div><div class="row"><div><div class="muted">SAMPLE CONTRACT VALUE</div><div class="price" id="amount">€29.00</div></div><div class="muted">EUR · demo only</div></div><div class="divider"></div><div class="small-title">Work to be completed</div><div class="box" id="requirement"></div><p class="sub" style="margin-bottom:0;margin-top:14px">Fictional seller and buyer. No funds are held in escrow; PayPal Sandbox authorization is a temporary hold, not escrow.</p></div>
 <div class="panel"><h2>2. Submit work evidence</h2><p class="sub">Paste what was delivered. The system checks against the milestone, not against instructions hidden in the evidence.</p><label class="label" for="evidence">Evidence of completed work</label><textarea id="evidence" placeholder="Example: The municipal sweeper tender analysis includes technical specifications, an export supplier comparison, deadline schedule and cited public sources."></textarea><label class="label" for="evidenceFile">Local PDF / TXT deliverable (max 1 MiB, 12 PDF pages)</label>
 <input type="file" id="evidenceFile" accept=".pdf,.txt,application/pdf,text/plain" style="max-width:100%;padding:10px;border:1px solid #dce6ee;border-radius:9px">
 <div class="buttons"><button id="analyzeFile" class="primary">Check local document</button></div>
 <div id="documentFindings" class="box" hidden style="margin-top:12px;white-space:pre-wrap"></div>
 <div class="buttons"><button id="analyze" class="primary">Analyze evidence</button><button class="ghost" id="example">Load example</button></div><p class="error" id="error" role="alert"></p><div id="analysis" class="analysis" hidden><div class="row"><div><small>KEYWORD-BASED AUDIT</small><div><strong id="score">—</strong> <span class="muted">requirements matched</span></div></div><span id="finding" class="chip">—</span></div><p class="sub" style="margin:10px 0 0" id="reason"></p><div class="divider"></div><div class="small-title">AI advisor</div><div id="aiInsights" class="muted" style="margin-top:9px">No AI model connected.</div></div></div>
-<div class="panel"><h2>3. Human approval</h2><p class="sub">A person must explicitly approve before any sandbox payment order is created. AI cannot release money.</p><div class="warning">A high similarity score is not proof the work was really delivered. Review the original work yourself before authorizing a sandbox transaction.</div><label class="label" for="buyerToken">Buyer authorization token</label><input id="buyerToken" type="password" autocomplete="off" placeholder="Paste the private buyer token from the local server" style="width:100%;padding:12px;border:1px solid #b8cbdc;border-radius:9px" /><p class="muted">The buyer token is stored locally beside the server state file; it is never embedded in this page or sent to a third party.</p>
+<div class="panel"><h2>3. Human approval</h2><p class="sub">After PayPal authorization and document verification, only the buyer may approve capture. AI cannot release money.</p><div class="warning">A high similarity score is not proof the work was really delivered. Review the original work yourself before authorizing a sandbox transaction.</div><label class="label" for="buyerToken">Buyer authorization token</label><input id="buyerToken" type="password" autocomplete="off" placeholder="Paste the private buyer token from the local server" style="width:100%;padding:12px;border:1px solid #b8cbdc;border-radius:9px" /><p class="muted">The buyer token is stored locally beside the server state file; it is never embedded in this page or sent to a third party.</p>
 <div class="buttons"><button class="dark" id="approve" disabled>Approve this milestone</button></div><p class="sub" id="approvalStatus" style="margin:11px 0 0">Not approved.</p></div>
 </section><aside>
-<div class="panel"><h2>4. Payment &amp; confirmation</h2><p class="sub">Real PayPal Developer Sandbox mode requires your own free sandbox credentials, never production credentials.</p><div class="payment"><div class="small-title">Payment connector</div><p id="payState" class="status" style="margin:10px 0">Checking …</p><div id="paypal-buttons"></div><div id="mockSection" hidden><div class="buttons"><button id="mockCreate" class="primary" disabled>Create simulated order</button><button id="mockCapture" class="ghost" disabled>Simulate buyer authorization</button>
+<div class="panel"><h2>4. Payment &amp; confirmation</h2><p class="sub">Buyer authorizes the sample amount first. Delivery evidence is reviewed later; explicit buyer approval is still required before capturing. Real PayPal requires free developer Sandbox credentials.</p><div class="payment"><div class="small-title">Payment connector</div><p id="payState" class="status" style="margin:10px 0">Checking …</p><div id="paypal-buttons"></div><div id="mockSection" hidden><div class="buttons"><button id="mockCreate" class="primary" disabled>Create simulated order</button><button id="mockCapture" class="ghost" disabled>Simulate buyer authorization</button>
 <button id="mockRelease" class="primary" disabled>Simulate capture</button>
 <button id="mockVoid" class="ghost" disabled>Simulate void</button></div></div>
 <div id="sandboxAuthorizationActions" class="buttons" hidden>
@@ -70,13 +70,13 @@ function render(){
     ?s.agentAnalysis.summary+' | Missing: '+((s.agentAnalysis.missing||[]).join(', ')||'none')+' | AI risk: '+s.agentAnalysis.risk
     :'AI NOT CONNECTED — displayed percentage is deterministic text matching, not AI inference.';
  }
- $('approve').disabled=!s.analysis||s.humanApproved||!!p||s.analysis?.status!=='POTENTIALLY_MATCHES';
+ $('approve').disabled=!s.analysis||s.humanApproved||(p&&p.status!=='AUTHORIZED')||s.analysis?.status!=='POTENTIALLY_MATCHES';
  $('approvalStatus').textContent=s.humanApproved?'Approved explicitly by a human':'Human approval pending';
  for(const [id,ready] of [['stEvidence',!!s.analysis],['stApproval',s.humanApproved],['stPayment',p?.status==='COMPLETED']])$(id).classList.toggle('done',ready);
  $('mockSection').hidden=config.payments==='PAYPAL_SANDBOX';
- $('mockCreate').disabled=!s.humanApproved||!!p;
+ $('mockCreate').disabled=!!p;
  $('mockCapture').disabled=!p||p.intent!=='AUTHORIZE'||p.status!=='CREATED';
- $('mockRelease').disabled=!p||p.status!=='AUTHORIZED';
+ $('mockRelease').disabled=!p||p.status!=='AUTHORIZED'||!s.humanApproved||s.analysis?.kind!=='DOCUMENT_PROOF';
  $('mockVoid').disabled=!p||p.status!=='AUTHORIZED';
  $('sandboxAuthorizationActions').hidden=config.payments!=='PAYPAL_SANDBOX'||p?.status!=='AUTHORIZED';
  $('audit').replaceChildren(...s.audit.slice().reverse().map(x=>{
@@ -85,7 +85,7 @@ function render(){
   const right=document.createElement('span');right.textContent=(new Date(x.at)).toLocaleTimeString();
   el.append(left,right);return el;
  }));
- if(config.payments==='PAYPAL_SANDBOX' && s.humanApproved && !paypalRendered && !p?.status?.includes('COMPLETED'))loadPaypal();
+ if(config.payments==='PAYPAL_SANDBOX' && !paypalRendered && !p)loadPaypal();
 }
 async function loadPaypal(){
  if(paypalRendered)return;paypalRendered=true;

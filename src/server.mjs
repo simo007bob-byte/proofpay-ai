@@ -144,7 +144,7 @@ export const server=http.createServer(async (req,res)=>{
         state.evidence='';
         state.analysis=proof;
         state.agentAnalysis=advice;
-        state.humanApproved=false;
+        state.humanApproved=false;state.approvedDigest=null;
         newAudit(state,'LOCAL_DOCUMENT_ANALYZED',{format:document.format,fileHash:document.sha256,
           claims:proof.claims.map(c=>({id:c.id,status:c.status,page:c.page})),status:proof.status});
         persist();
@@ -198,14 +198,18 @@ export const server=http.createServer(async (req,res)=>{
           amount:state.milestone.amount,currency:state.milestone.currency
         });
         state.payment.status=result.status;state.payment.authorizationId=result.authorizationId;
-        state.humanApproved=false;
+        // Authorization starts a NEW delivery window; stale pre-authorization files cannot be accepted.
+        state.humanApproved=false;state.approvedDigest=null;
+        state.analysis=null;state.agentAnalysis=null;state.evidence='';
         newAudit(state,state.payment.mode==='SIMULATION_ONLY'?'SIMULATION_AUTHORIZED':'PAYPAL_SANDBOX_AUTHORIZED',
           {verifiedBy:result.verifiedBy||'MOCK_ONLY'});
         persist();return send(res,200,current());
       }
       if(path==='/api/capture-authorization') {
         if(!state.humanApproved||state.analysis?.kind!=='DOCUMENT_PROOF'||
-          state.analysis.status!=='POTENTIALLY_MATCHES'||!state.payment||
+          state.analysis.status!=='POTENTIALLY_MATCHES'||
+          !state.analysis.document?.sha256||
+          state.approvedDigest!==state.analysis.document.sha256||!state.payment||
           state.payment.intent!=='AUTHORIZE'||state.payment.status!=='AUTHORIZED')
           throw new AppError('Buyer must approve a supported PDF/TXT delivery after payment authorization',403);
         const result=await paypal.captureAuthorization(state.payment,{

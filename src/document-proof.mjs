@@ -83,13 +83,18 @@ export async function inspectDocument(input) {
 const words=x=>String(x).toLowerCase().normalize('NFKC').match(/[\p{L}\p{N}]{3,}/gu)||[];
 function claimMatch(lines,terms) {
   const exact=terms.map(x=>x.toLowerCase());
+  let firstPositive=null;
   for(const l of lines){
     const lower=l.text.toLowerCase().normalize('NFKC');
     const tokens=new Set(words(lower));
-    if(exact.every(t=>tokens.has(t)))
-      return {page:l.page,quote:l.text.trim().slice(0,MAX_EXCERPT),contradicted:NEGATION.test(lower)};
+    if(exact.every(t=>tokens.has(t))) {
+      const found={page:l.page,quote:l.text.trim().slice(0,MAX_EXCERPT),contradicted:NEGATION.test(lower)};
+      // A seller cannot bury an explicit contradiction below a positive statement.
+      if(found.contradicted)return found;
+      firstPositive??=found;
+    }
   }
-  return null;
+  return firstPositive;
 }
 export function evaluateDocumentProof(document,contract=DEFAULT_EVIDENCE_CONTRACT) {
   if(!document||!Array.isArray(document.pages)||!document.pages.length)
@@ -110,13 +115,21 @@ export function evaluateDocumentProof(document,contract=DEFAULT_EVIDENCE_CONTRAC
       page:match?.page??null,quote:match?.quote??null};
   });
   const mentioned=claims.filter(c=>c.status==='TEXT_MENTIONED').length;
+  // A verbatim or near-verbatim checklist pasted on a single line is not supporting evidence.
+  const sourceCounts=new Map();
+  for(const c of claims) if(c.status==='TEXT_MENTIONED') {
+    const k=String(c.page)+':'+c.quote;
+    sourceCounts.set(k,(sourceCounts.get(k)||0)+1);
+  }
+  const copiedChecklist=[...sourceCounts.values()].some(n=>n>=3);
   // Text mentioning a requirement cannot prove it actually happened; always require human confirmation.
-  const status=instructions.length||claims.some(c=>c.status==='CONTRADICTED')
+  const status=instructions.length||copiedChecklist||claims.some(c=>c.status==='CONTRADICTED')
     ?'REVIEW_REQUIRED':mentioned===claims.length?'POTENTIALLY_MATCHES':'INSUFFICIENT_PROOF';
   const reasonCodes=[
     ...(instructions.length?['DOCUMENT_INSTRUCTION_INJECTION']:[]),
     ...(claims.some(c=>c.status==='CONTRADICTED')?['DOCUMENT_CONTRADICTED']:[]),
-    ...(claims.some(c=>c.status==='MISSING')?['DOCUMENT_CLAIM_MISSING']:[])
+    ...(claims.some(c=>c.status==='MISSING')?['DOCUMENT_CLAIM_MISSING']:[]),
+    ...(copiedChecklist?['DOCUMENT_CHECKLIST_RESTATEMENT']:[])
   ];
   return {kind:'DOCUMENT_PROOF',status,matchPercent:Math.round(100*mentioned/claims.length),
     document:{filename:document.filename,format:document.format,sha256:document.sha256,bytes:document.bytes,pageCount:document.pages.length},

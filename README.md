@@ -4,6 +4,9 @@
 
 ProofPay belongs to the existing Hermes-SKYNET project. This repository is a working prototype. It is not proof that SKYNET agents (Astra Planner, Testsmith, Builder) autonomously produced a finished hackathon entry.
 
+## Correct payment lifecycle – buyer hold before work
+The buyer creates an \`AUTHORIZE\` order and authorizes the fixed 29.00 EUR Sandbox sample payment **before** the supplier uploads evidence. The supplier uploads a PDF/TXT file; the local tool identifies quoted passages, missing sections and contradictions. The buyer then explicitly accepts the document with a private token. Only then can the payment be captured. A rejected delivery may instead void the authorization. Without Sandbox credentials, the actions and screenshots are **simulation only**; no actual PayPal hold exists.
+
 ## V3/V4 preview – experimental (28 October 2026)
 This development branch adds local PDF/TXT text extraction, file SHA-256, page-linked claim passages and a buyer-authorized PayPal \`AUTHORIZE → CAPTURE / VOID\` workflow. The first round of 85 unit/integration tests passed, including a Chromium simulation-only browser test. **No live PayPal Sandbox authorization/capture/void has yet been validated on this branch.** 40 synthetic labeled text fixtures are not a real-world accuracy benchmark. See [V3/V4 controlled validation](docs/V3V4_VALIDATION_20261028.md) before trying to publish a new hackathon video.
 

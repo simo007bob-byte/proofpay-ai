@@ -162,7 +162,7 @@ export function initialState() {
       buyer:'Example distribution company (fictional)',
       currency:'EUR', amount:'29.00',
     },
-    evidence:'', analysis:null, agentAnalysis:null, humanApproved:false,
+    evidence:'', analysis:null, agentAnalysis:null, humanApproved:false, approvedDigest:null,
     payment:null, audit:[{at:new Date().toISOString(),action:'DEMO_MILESTONE_CREATED'}]
   };
 }
@@ -173,9 +173,10 @@ export function newAudit(state,action,details={}) {
 export function analyze(state,evidence,agentAnalysis=null) {
   if(state.payment) throw new AppError('Milestone is locked after payment order creation',409);
   const metrics=assessEvidence(state.milestone.task,evidence);
+  metrics.evidenceDigest=sha256Hex(evidence);
   state.evidence=evidence;state.analysis=metrics;
   state.agentAnalysis=agentAnalysis;
-  state.humanApproved=false;
+  state.humanApproved=false;state.approvedDigest=null;
   newAudit(state,'EVIDENCE_ANALYZED',{status:metrics.status,match:metrics.matchPercent,aiProvider:agentAnalysis?.provider||'NOT_CONNECTED'});
   return metrics;
 }
@@ -184,7 +185,7 @@ export function analyzeBundle(state,artifacts,contract=DEFAULT_EVIDENCE_CONTRACT
   const result=evaluateEvidenceBundle(contract,artifacts);
   state.evidence='';state.analysis=result;
   state.agentAnalysis=null;
-  state.humanApproved=false;
+  state.humanApproved=false;state.approvedDigest=null;
   newAudit(state,'EVIDENCE_BUNDLE_ANALYZED',{status:result.status,match:result.matchPercent,contractId:result.contractId,
     reasonCodes:result.reasonCodes,bundleDigest:result.bundleDigest});
   return result;
@@ -198,11 +199,18 @@ export function humanApprove(state,approved) {
   if(bundleUnsatisfied(state.analysis)) throw new AppError('Evidence contract not satisfied; missing claims must be delivered first',422);
   if(state.analysis.status==='INSUFFICIENT_PROOF') throw new AppError('Insufficient evidence; improve the delivery proof before approval',422);
   if(approved!==true) throw new AppError('Explicit human confirmation required',422);
-  state.humanApproved=true;
+  const digest=state.analysis.document?.sha256||state.analysis.bundleDigest||state.analysis.evidenceDigest;
+  if(typeof digest!=='string'||!/^[a-f0-9]{64}$/i.test(digest))
+    throw new AppError('Evidence must be bound to a valid SHA-256 digest before approval',422);
+  state.humanApproved=true;state.approvedDigest=digest;
   newAudit(state,'HUMAN_APPROVED',{method:'manual_button',automatic:false,bundleDigest:state.analysis.bundleDigest||null});
 }
 export function canCreateOrder(state) {
   if(!state.humanApproved||!state.analysis) throw new AppError('Human-approved evidence required before payment',403);
+  const digest=state.analysis.document?.sha256||state.analysis.bundleDigest||state.analysis.evidenceDigest;
+  if(!digest||state.approvedDigest!==digest||
+     (state.analysis.evidenceDigest&&sha256Hex(state.evidence)!==digest))
+    throw new AppError('Evidence changed or approval is stale; analyze and approve again',409);
   if(bundleUnsatisfied(state.analysis)) throw new AppError('Evidence contract not satisfied',403);
   if(state.payment) throw new AppError('Payment order already exists',409);
 }

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { tmpdir } from 'node:os';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { LocalAI } from '../src/ai.mjs';
 
@@ -32,9 +32,10 @@ test('Complete HTTP lifecycle: analyze, manually approve, create mock order, cap
  const {server}=await import('../src/server.mjs');
  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
  const base='http://127.0.0.1:'+server.address().port;
+ const token=readFileSync(process.env.DATA_FILE+'.buyer-token','utf8').trim();
  async function request(path,params=null){
   const res=await fetch(base+path,params===null?{}:{method:'POST',
-   headers:{'Content-Type':'application/json'},body:JSON.stringify(params)});
+   headers:{'Content-Type':'application/json','X-Buyer-Token':token},body:JSON.stringify(params)});
   return {status:res.status,body:await res.json()};
  }
  try{
@@ -47,6 +48,9 @@ test('Complete HTTP lifecycle: analyze, manually approve, create mock order, cap
    'I delivered municipal sweeper export tender analysis with technical specifications, cited sources, a supplier comparison and deadline schedule.'});
   assert.equal(res.status,200);
   assert.equal(res.body.state.humanApproved,false);
+  // Without a verified buyer credential, approval must never succeed.
+  const denied=await fetch(base+'/api/approve',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({approved:true})});
+  assert.equal(denied.status,403);
   res=await request('/api/approve',{approved:true});
   assert.equal(res.status,200);
   assert.equal(res.body.state.humanApproved,true);

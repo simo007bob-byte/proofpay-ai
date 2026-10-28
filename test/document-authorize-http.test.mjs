@@ -29,31 +29,41 @@ test('file-based authorized capture or void requires buyer token and cannot doub
   filename:'sample-delivery.txt',mimeType:'text/plain',base64:Buffer.from(proof).toString('base64')
  });
  try{
-  let r=await analyze();
+  // Buyer reserves a fixed amount before any supplier work is accepted.
+  assert.equal((await post('/api/create-authorization-order',{},'')).status,403);
+  let r=await post('/api/create-authorization-order',{amount:'0.01',currency:'USD'});
+  assert.equal(r.status,200);
+  assert.equal(r.data.state.payment.intent,'AUTHORIZE');
+  const orderId=r.data.state.payment.id;
+  assert.equal((await post('/api/authorize-order',{orderId:'FOREIGN'})).status,409);
+  r=await post('/api/authorize-order',{orderId});
+  assert.equal(r.status,200);
+  assert.equal(r.data.state.payment.status,'AUTHORIZED');
+  assert.equal(r.data.state.humanApproved,false);
+  assert.equal((await post('/api/capture-authorization',{})).status,403);
+  assert.equal((await post('/api/authorize-order',{orderId})).status,409);
+  // Seller uploads an actual file after authorization; buyer examines cited passages.
+  r=await analyze();
   assert.equal(r.status,200);
   assert.equal(r.data.state.analysis.kind,'DOCUMENT_PROOF');
   assert.equal(r.data.state.analysis.status,'POTENTIALLY_MATCHES');
   assert.ok(r.data.state.analysis.claims.every(c=>c.quote));
+  assert.equal((await post('/api/capture-authorization',{})).status,403);
   assert.equal((await post('/api/approve',{approved:true},'')).status,403);
   assert.equal((await post('/api/approve',{approved:true})).status,200);
-  assert.equal((await post('/api/create-authorization-order',{},'')).status,403);
-  r=await post('/api/create-authorization-order',{amount:'0.01',currency:'USD'});
-  assert.equal(r.status,200);assert.equal(r.data.state.payment.intent,'AUTHORIZE');
-  const orderId=r.data.state.payment.id;
-  assert.equal((await post('/api/authorize-order',{orderId:'FOREIGN'})).status,409);
-  r=await post('/api/authorize-order',{orderId});
-  assert.equal(r.data.state.payment.status,'AUTHORIZED');
-  assert.equal((await post('/api/authorize-order',{orderId})).status,409);
   r=await post('/api/capture-authorization',{});
+  assert.equal(r.status,200);
   assert.equal(r.data.state.payment.status,'COMPLETED');
   assert.equal(r.data.state.audit.at(-1).action,'SIMULATION_CAPTURE_COMPLETED');
   assert.equal((await post('/api/capture-authorization',{})).status,403);
   assert.equal((await post('/api/void-authorization',{})).status,403);
   assert.equal((await post('/api/reset',{confirm:true})).status,200);
-  await analyze();await post('/api/approve',{approved:true});
+  // Independent second hold can be voided before file delivery.
   r=await post('/api/create-authorization-order',{});
+  assert.equal(r.status,200);
   await post('/api/authorize-order',{orderId:r.data.state.payment.id});
   r=await post('/api/void-authorization',{});
+  assert.equal(r.status,200);
   assert.equal(r.data.state.payment.status,'VOIDED');
   assert.equal(r.data.state.audit.at(-1).action,'SIMULATION_AUTHORIZATION_VOIDED');
   assert.equal((await post('/api/capture-authorization',{})).status,403);

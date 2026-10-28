@@ -32,7 +32,7 @@ test('Rejects empty and oversized evidence',()=>{
 });
 test('Blocks work after an order has been created',()=>{
   const state=initialState();
-  analyze(state,'Delivered municipal sweeper tender report and technical specifications.');
+  analyze(state,'Delivered multilingual municipal sweeper export tender analysis, supplier comparison, technical specifications, deadline schedule and cited sources.');
   humanApprove(state,true);
   state.payment={id:'MOCK',status:'CREATED'};
   assert.throws(()=>analyze(state,'new evidence'),/locked/);

@@ -2,7 +2,7 @@ import http from 'node:http';
 import { readFileSync, writeFileSync, mkdirSync, renameSync, chmodSync, existsSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { initialState, analyze, assessEvidence, humanApprove, canCreateOrder, sanitizePublic, newAudit, AppError } from './core.mjs';
 import { PayPalSandbox } from './paypal.mjs';
 import { LocalAI } from './ai.mjs';
@@ -16,6 +16,24 @@ const MISSION_SCRIPT = (/<script>([\s\S]*?)<\/script>/.exec(MISSION_HTML)||[])[1
 const MISSION_CSP = "default-src 'none'; script-src 'sha256-"+createHash('sha256').update(MISSION_SCRIPT,'utf8').digest('base64')+
   "'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
 const STATE_FILE = resolve(process.env.DATA_FILE||resolve(HERE,'../data/state.json'));
+// Local buyer access token is never returned from /api/state or stored in the repo.
+const BUYER_TOKEN_FILE=STATE_FILE+'.buyer-token';
+let buyerToken=String(process.env.BUYER_APPROVAL_TOKEN||'');
+if(!buyerToken) {
+  try {buyerToken=readFileSync(BUYER_TOKEN_FILE,'utf8').trim();} catch(e) {
+    if(e.code!=='ENOENT')throw e;
+    mkdirSync(dirname(BUYER_TOKEN_FILE),{recursive:true,mode:0o700});
+    buyerToken=randomBytes(32).toString('base64url');
+    writeFileSync(BUYER_TOKEN_FILE,buyerToken+'\n',{flag:'wx',mode:0o600});
+  }
+}
+if(buyerToken.length<32) throw new Error('Buyer approval token must be at least 32 characters');
+function requireBuyer(req) {
+  const candidate=String(req.headers['x-buyer-token']||'');
+  const a=Buffer.from(candidate),b=Buffer.from(buyerToken);
+  if(a.length!==b.length || !timingSafeEqual(a,b))
+    throw new AppError('Buyer authorization required (check local approval token)',403);
+}
 const PORT = Number(process.env.PORT||8777);
 const HOST = process.env.HOST||'127.0.0.1'; // Never expose internet by default.
 if(!['127.0.0.1','localhost'].includes(HOST)) throw new Error('PUBLIC_BIND_DISABLED');
@@ -83,6 +101,8 @@ export const server=http.createServer(async (req,res)=>{
     if(req.method==='GET' && path==='/api/state')return send(res,200,current());
     if(req.method!=='POST')return send(res,404,{error:'Not found'});
     assertOrigin(req);
+    if(['/api/approve','/api/create-order','/api/capture','/api/reset'].includes(path))
+      requireBuyer(req);
     if(busy)throw new AppError('Another state update is in progress',409);
     busy=true;
     try{
@@ -91,7 +111,16 @@ export const server=http.createServer(async (req,res)=>{
         const evidence=String(data.evidence||'');
         // Evidence is untrusted and never allowed to mutate our instructions.
         const prescreen=assessEvidence(state.milestone.task,evidence);
-        const result=prescreen.status==='REVIEW_REQUIRED'?null:await ai.evaluate(state.milestone.task,evidence);
+        let result=null;
+        if(prescreen.status!=='REVIEW_REQUIRED') {
+          try { result=await ai.evaluate(state.milestone.task,evidence); }
+          catch (e) {
+            if(!(e instanceof AppError) || ![502,503].includes(e.status))throw e;
+            result={provider:'DETERMINISTIC_FALLBACK',risk:'unknown',
+              summary:'Local semantic model unavailable; only deterministic keyword checking completed.',
+              authority:'Advisory only. Model failure is not proof of delivery.'};
+          }
+        }
         analyze(state,evidence,result);persist();
         return send(res,200,current());
       }
@@ -117,12 +146,16 @@ export const server=http.createServer(async (req,res)=>{
           currency:state.milestone.currency,amount:state.milestone.amount
         });
         state.payment.status=confirmed.status;
-        newAudit(state,'SANDBOX_CAPTURE_CONFIRMED',{mode:state.payment.mode});
+        newAudit(state,state.payment.mode==='SIMULATION_ONLY'?'SIMULATION_CAPTURE_COMPLETED':'PAYPAL_SANDBOX_CAPTURE_CONFIRMED',{mode:state.payment.mode});
         persist();return send(res,200,current());
       }
       if(path==='/api/reset'){
         if(data.confirm!==true)throw new AppError('Explicit demo reset required',422);
-        state=initialState();persist();return send(res,200,current());
+        const priorAudit=state.audit.slice(-100);
+        state=initialState();
+        state.audit=[...priorAudit,...state.audit];
+        newAudit(state,'DEMO_RESET',{priorEventsPreserved:priorAudit.length});
+        persist();return send(res,200,current());
       }
       return send(res,404,{error:'Not found'});
     }finally{busy=false;}
@@ -137,5 +170,6 @@ if(process.argv[1]&&fileURLToPath(import.meta.url)===resolve(process.argv[1])){
     console.log('PROOFPAY_LOOPBACK http://'+HOST+':'+PORT);
     console.log('Mission control: http://'+HOST+':'+PORT+'/mission-control');
     console.log('PayPal:',paypal.mode,'AI:',ai.enabled?mode:'NOT_CONNECTED');
+    console.log('Buyer approval: local token file',BUYER_TOKEN_FILE,'(contents never logged)');
   });
 }

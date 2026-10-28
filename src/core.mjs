@@ -13,8 +13,9 @@ const INJECTION_PATTERNS=[
   ['SECRET_EXFILTRATION',/\breveal\s+(?:the\s+|your\s+)?(?:password|secret|token|api\s*key|credentials?)/i],
   ['SYSTEM_TAG',/<\s*\/?\s*system\s*>/i],
   ['ROLE_OVERRIDE',/\byou\s+are\s+now\s+(?:an?\s+|the\s+)?(?:admin|administrator|system|developer|approver)\b/i],
-  ['APPROVAL_COMMAND',/\b(?:auto[-\s]?approve|approve\s+(?:this\s+|the\s+)?(?:payment|milestone|order)|capture\s+(?:the\s+|this\s+)?payment|release\s+(?:the\s+)?funds)\b/i],
+  ['APPROVAL_COMMAND',/\b(?:auto[-\s]?approve|approve\s+(?:this\s+|the\s+)?(?:payment|milestone|order)|release\s+(?:the\s+)?funds)\b/i],
   ['STATE_TAMPERING',/\bhumanApproved\s*[:=]/i],
+  ['PAYMENT_OVERRIDE',/\b(?:treat\s+(?:this|it)\s+as\s+verified|authorize\s+(?:the\s+)?payout|bypass\s+(?:the\s+)?approval\s+gate)\b/i],
 ];
 // Untrusted text is only scanned, never interpreted. Returns stable pattern names.
 export function detectInjection(text) {
@@ -31,10 +32,17 @@ export function assessEvidence(requirement, evidence) {
   const hits=req.filter(w=>proof.includes(w));
   const coverage=req.length?Math.round(100*hits.length/req.length):0;
   const suspicious=detectInjection(evidence).length>0;
+  const normalized=String(evidence).normalize('NFKC').trim().toLowerCase().replace(/\s+/g,' ');
+  const copied=normalized===String(requirement).normalize('NFKC').trim().toLowerCase().replace(/\s+/g,' ');
+  // Token overlap alone cannot override explicit non-delivery or a pasted specification.
+  const negated= /\b(?:did|have|has|was|were|is|are|do|does)\s+(?:not|never)\s+(?:actually\s+)?(?:deliver|provide|complete|finish|submit)\b/i.test(evidence)
+    || /\b(?:not|never|without)\s+(?:(?:yet|been)\s+)?(?:delivered|completed|provided|submitted|finished)\b/i.test(evidence)
+    || /\b(?:still|currently)\s+(?:missing|incomplete|undelivered)\b/i.test(evidence);
+  const unverified=suspicious||negated||copied;
   return {
     matchPercent:coverage, matchedTerms:hits.slice(0,12),
-    status:suspicious?'REVIEW_REQUIRED':coverage>=45?'POTENTIALLY_MATCHES':'INSUFFICIENT_PROOF',
-    concerns:[...(suspicious?['Potential instruction injection in untrusted evidence']:[]),...(coverage<45?['Missing required deliverable terms']:[])],
+    status:unverified?'REVIEW_REQUIRED':coverage>=45?'POTENTIALLY_MATCHES':'INSUFFICIENT_PROOF',
+    concerns:[...(suspicious?['Potential instruction injection in untrusted evidence']:[]),...(negated?['Evidence explicitly states non-delivery']:[]),...(copied?['Evidence repeats the task rather than providing delivery details']:[]),...(coverage<45?['Missing required deliverable terms']:[])],
     authority:'Decision support only. Human approval mandatory.'
   };
 }
@@ -185,8 +193,9 @@ const bundleUnsatisfied=a=>a?.kind==='EVIDENCE_BUNDLE'&&a.status!=='POTENTIALLY_
 export function humanApprove(state,approved) {
   if(state.payment) throw new AppError('Payment order already exists',409);
   if(!state.analysis) throw new AppError('Analyze evidence before approval',422);
-  if(state.analysis.status==='REVIEW_REQUIRED') throw new AppError('Suspicious content needs manual investigation outside this demo',422);
+  if(state.analysis.status==='REVIEW_REQUIRED') throw new AppError('Suspicious or unverified evidence needs manual investigation outside this demo',422);
   if(bundleUnsatisfied(state.analysis)) throw new AppError('Evidence contract not satisfied; missing claims must be delivered first',422);
+  if(state.analysis.status==='INSUFFICIENT_PROOF') throw new AppError('Insufficient evidence; improve the delivery proof before approval',422);
   if(approved!==true) throw new AppError('Explicit human confirmation required',422);
   state.humanApproved=true;
   newAudit(state,'HUMAN_APPROVED',{method:'manual_button',automatic:false,bundleDigest:state.analysis.bundleDigest||null});

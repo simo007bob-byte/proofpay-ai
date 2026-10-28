@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {tmpdir} from 'node:os';
-import {mkdtempSync,rmSync} from 'node:fs';
+import {mkdtempSync,rmSync,readFileSync} from 'node:fs';
 import {join} from 'node:path';
 
 test('Actual CPU transformer AI analysis flows into payment only after HUMAN approval',async()=>{
@@ -13,9 +13,10 @@ test('Actual CPU transformer AI analysis flows into payment only after HUMAN app
  const {server}=await import('../src/server.mjs');
  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
  const url='http://127.0.0.1:'+server.address().port;
+ const token=readFileSync(process.env.DATA_FILE+'.buyer-token','utf8').trim();
  async function post(path,obj={}){
   const response=await fetch(url+path,{
-    method:'POST',headers:{'Content-Type':'application/json'},
+    method:'POST',headers:{'Content-Type':'application/json','X-Buyer-Token':token},
     body:JSON.stringify(obj)});
   return {code:response.status,body:await response.json()};
  }

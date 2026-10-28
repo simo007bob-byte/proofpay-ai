@@ -60,6 +60,13 @@ See `docs/PAYPAL_SANDBOX_VALIDATION.md` for a truth-preserving validation matrix
 
 The backend uses POST https://api-m.sandbox.paypal.com/v1/oauth2/token, POST /v2/checkout/orders and POST /v2/checkout/orders/{id}/capture. Amounts are fixed on the merchant side, and requests carry PayPal idempotency identifiers. Credentials are never returned to the browser.
 
+## Buyer approval credential (audit P0)
+The server generates a local buyer token in \`data/state.json.buyer-token\` on first start (permissions 0600). The customer handling the demo copies that token into the **Buyer authorization token** field before approving, creating, capturing or resetting a demo order. The token is not present in public JSON responses, the Git repository, or video footage. An optional \`BUYER_APPROVAL_TOKEN\` environment variable (minimum 32 characters) can provide an external secret, but do **not** use a real PayPal secret for this purpose. This is a lightweight buyer gate on a **single-user loopback prototype**; it is not full authentication, production authorization, or multi-tenant security. Preserve the file privately, never publish it.
+
+## Audit workstream – isolated remediation (28 October 2026)
+The original Claude review tested commit `c1974a8` on 27 October; it does not cover later changes. The proposed audit-v2 branch introduces conservative guards for explicit non-delivery, pasted instructions, and low-coverage evidence; deterministic analysis can continue when the local semantic model returns 502/503. Simulated captures are no longer logged as genuine Sandbox confirmations; reset retains audit history. These improvements are **not** the requested file-based, per-claim AI verification, authorization/void flow, or buyer-token authorization. Those remain unimplemented and must not be presented as complete on Devpost or in the demo.
+The example proof still relies on untrusted seller-supplied text; a SHA-256 digest detects later changes but does not prove truth or delivery quality. Do not claim otherwise.
+
 ## Sandbox receipt validation (28 October 2026)
 The capture endpoint now fails closed unless PayPal returns a completed capture with the exact approved amount and currency, a capture identifier, the expected order identifier and (when returned at order creation) the expected merchant. After capture, the server independently retrieves the order through PayPal Orders v2 GET and requires the same completed capture and amount. These checks reject malformed, ambiguous and contradictory API receipts instead of trusting the top-level payment status alone.
 

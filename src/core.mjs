@@ -191,7 +191,8 @@ export function analyzeBundle(state,artifacts,contract=DEFAULT_EVIDENCE_CONTRACT
 }
 const bundleUnsatisfied=a=>a?.kind==='EVIDENCE_BUNDLE'&&a.status!=='POTENTIALLY_MATCHES';
 export function humanApprove(state,approved) {
-  if(state.payment) throw new AppError('Payment order already exists',409);
+  if(state.payment && !(state.payment.intent==='AUTHORIZE'&&state.payment.status==='AUTHORIZED'))
+    throw new AppError('Payment has already been finalized or is not authorized',409);
   if(!state.analysis) throw new AppError('Analyze evidence before approval',422);
   if(state.analysis.status==='REVIEW_REQUIRED') throw new AppError('Suspicious or unverified evidence needs manual investigation outside this demo',422);
   if(bundleUnsatisfied(state.analysis)) throw new AppError('Evidence contract not satisfied; missing claims must be delivered first',422);

@@ -17,6 +17,11 @@ This branch is **development only**. Public Devpost and YouTube remain unchanged
 - Browser automation with Chromium: upload TXT, inspect evidence quotes, enter separate buyer token, manually approve, create **simulated** authorization, simulated capture, reset, simulated void; no JS page errors. Screenshots stored temporarily on the server.
 - PayPal backend positive/negative API cases covered by mock fetcher; wrong merchant, amount, currency, ambiguous receipt, readback mismatch and double capture rejected in tests.
 
+## Additional Windows laptop check (28 October 2026)
+- Clean temporary unpack on Windows with Node 24.19.0 and `npm ci` succeeded; `node --test` excluding the live MiniLM model download **passed 84/84**.
+- The full Windows run was not accepted as green: the first-run transformer model cache could not be renamed (`EPERM` while the test worker was being stopped). A controlled repeat with a complete local cache is required. This does **not** invalidate the independent full GitHub CI, but Windows AI readiness remains open.
+- No Sandbox merchant credentials were configured in that test environment; all payment actions were mocked or simulated.
+
 ## Not yet verified – release-blocking
 - No **new** actual PayPal Sandbox AUTHORIZE / CAPTURE / VOID run on this branch. Prior ProofPay Sandbox CAPTURE from 27 October concerns the **old immediate CAPTURE implementation**, not these new methods.
 - No independent multi-platform Windows/macOS fresh clone test.

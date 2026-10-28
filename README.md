@@ -4,6 +4,9 @@
 
 ProofPay belongs to the existing Hermes-SKYNET project. This repository is a working prototype. It is not proof that SKYNET agents (Astra Planner, Testsmith, Builder) autonomously produced a finished hackathon entry.
 
+## V3/V4 preview – experimental (28 October 2026)
+This development branch adds local PDF/TXT text extraction, file SHA-256, page-linked claim passages and a buyer-authorized PayPal \`AUTHORIZE → CAPTURE / VOID\` workflow. The first round of 85 unit/integration tests passed, including a Chromium simulation-only browser test. **No live PayPal Sandbox authorization/capture/void has yet been validated on this branch.** 40 synthetic labeled text fixtures are not a real-world accuracy benchmark. See [V3/V4 controlled validation](docs/V3V4_VALIDATION_20261028.md) before trying to publish a new hackathon video.
+
 ## What it does
 ProofPay is for freelancers, agencies and cross-border service businesses. A buyer compares milestone-delivery evidence against the agreed requirement, with help from an optional local AI advisor. A human then explicitly approves the milestone, and only after that is checkout offered. ProofPay is not escrow and never authorizes payment automatically.
 

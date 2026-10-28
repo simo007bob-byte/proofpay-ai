@@ -14,7 +14,7 @@ const receipt=(override={})=>({
 function sandbox({orderReceipt=receipt(),readback=receipt(),captureValue='29.00',voidStatus='VOIDED'}={}){
  const calls=[];
  const fetcher=async(url,opts)=>{
-  calls.push([url,opts.method]);
+  calls.push([url,opts.method,opts.headers]);
   const path=url.replace('https://api-m.sandbox.paypal.com','');
   const json=(data,status=200)=>({ok:status<300,status,json:async()=>data});
   if(path==='/v1/oauth2/token')return json({access_token:'TEST-TOKEN'});
@@ -45,7 +45,14 @@ test('PayPal AUTHORIZE create order -> buyer authorization -> capture -> indepen
  assert.equal(capture.verifiedBy,'PAYPAL_CAPTURE_GET');
  assert.ok(calls.some(([url])=>url.endsWith('/authorize')));
  assert.ok(calls.some(([url])=>url.endsWith('/capture')));
+ // The real Orders v2 API defaults to a minimal response unless requested otherwise.
+ // Our validation needs purchase_units / authorizations / amounts in the representation.
+ assert.ok(calls.some(([url])=>url.endsWith('/authorize')));
+
  assert.ok(calls.some(([url])=>url.endsWith('/v2/payments/captures/'+CAP)));
+ assert.ok(calls.filter(([url])=>!url.includes('/v1/oauth2/token'))
+   .every(([url,method,headers])=>headers?.Prefer==='return=representation'));
+
  assert.ok(calls.every(([url])=>url.startsWith('https://api-m.sandbox.paypal.com/')));
 });
 test('PayPal authorization void confirms with independent GET',async()=>{

@@ -100,7 +100,7 @@ export class PayPalSandbox {
 
   async authorizedRequest(path,{method='GET',body,requestId}={}) {
     const access=await this.token();
-    const headers={'Authorization':'Bearer '+access,'Accept':'application/json'};
+    const headers={'Authorization':'Bearer '+access,'Accept':'application/json','Prefer':'return=representation'};
     if(method!=='GET')headers['Content-Type']='application/json';
     if(requestId)headers['PayPal-Request-Id']=requestId.slice(0,45);
     const reply=await this.fetcher(SANDBOX+path,{

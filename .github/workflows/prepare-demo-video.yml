@@ -12,6 +12,8 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+      - name: Install FFmpeg on runner
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
       - name: Normalize the original demo's quiet audio, without editing footage
         run: |
           ffmpeg -hide_banner -loglevel error -y \

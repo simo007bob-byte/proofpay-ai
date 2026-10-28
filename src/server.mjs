@@ -113,7 +113,9 @@ export const server=http.createServer(async (req,res)=>{
         if(data.orderId!==state.payment.id)throw new AppError('Order mismatch',409);
         // In real sandbox mode, only buyer approval via PayPal JS onApprove
         // should call this endpoint. Server-side validation with PayPal follows.
-        const confirmed=await paypal.captureOrder(state.payment);
+        const confirmed=await paypal.captureOrder(state.payment,{
+          currency:state.milestone.currency,amount:state.milestone.amount
+        });
         state.payment.status=confirmed.status;
         newAudit(state,'SANDBOX_CAPTURE_CONFIRMED',{mode:state.payment.mode});
         persist();return send(res,200,current());

@@ -162,7 +162,7 @@ export function initialState() {
       buyer:'Example distribution company (fictional)',
       currency:'EUR', amount:'29.00',
     },
-    evidence:'', analysis:null, agentAnalysis:null, humanApproved:false,
+    evidence:'', analysis:null, agentAnalysis:null, humanApproved:false, approvedDigest:null,
     payment:null, audit:[{at:new Date().toISOString(),action:'DEMO_MILESTONE_CREATED'}]
   };
 }
@@ -177,8 +177,7 @@ export function analyze(state,evidence,agentAnalysis=null) {
   state.evidence=evidence;state.analysis=metrics;
   state.agentAnalysis=agentAnalysis;
   state.humanApproved=false;state.approvedDigest=null;
-  newAudit(state,'EVIDENCE_ANALYZED',{status:metrics.status,match:metrics.matchPercent,
-    evidenceDigest:metrics.evidenceDigest,aiProvider:agentAnalysis?.provider||'NOT_CONNECTED'});
+  newAudit(state,'EVIDENCE_ANALYZED',{status:metrics.status,match:metrics.matchPercent,aiProvider:agentAnalysis?.provider||'NOT_CONNECTED'});
   return metrics;
 }
 export function analyzeBundle(state,artifacts,contract=DEFAULT_EVIDENCE_CONTRACT) {
@@ -193,24 +192,24 @@ export function analyzeBundle(state,artifacts,contract=DEFAULT_EVIDENCE_CONTRACT
 }
 const bundleUnsatisfied=a=>a?.kind==='EVIDENCE_BUNDLE'&&a.status!=='POTENTIALLY_MATCHES';
 export function humanApprove(state,approved) {
-  if(state.payment) throw new AppError('Payment order already exists',409);
+  if(state.payment && !(state.payment.intent==='AUTHORIZE'&&state.payment.status==='AUTHORIZED'))
+    throw new AppError('Payment has already been finalized or is not authorized',409);
   if(!state.analysis) throw new AppError('Analyze evidence before approval',422);
   if(state.analysis.status==='REVIEW_REQUIRED') throw new AppError('Suspicious or unverified evidence needs manual investigation outside this demo',422);
   if(bundleUnsatisfied(state.analysis)) throw new AppError('Evidence contract not satisfied; missing claims must be delivered first',422);
   if(state.analysis.status==='INSUFFICIENT_PROOF') throw new AppError('Insufficient evidence; improve the delivery proof before approval',422);
   if(approved!==true) throw new AppError('Explicit human confirmation required',422);
-  state.humanApproved=true;
-  state.approvedDigest=state.analysis.bundleDigest||state.analysis.evidenceDigest||null;
-  newAudit(state,'HUMAN_APPROVED',{method:'manual_button',automatic:false,
-    bundleDigest:state.analysis.bundleDigest||null,evidenceDigest:state.analysis.evidenceDigest||null});
+  const digest=state.analysis.document?.sha256||state.analysis.bundleDigest||state.analysis.evidenceDigest;
+  if(typeof digest!=='string'||!/^[a-f0-9]{64}$/i.test(digest))
+    throw new AppError('Evidence must be bound to a valid SHA-256 digest before approval',422);
+  state.humanApproved=true;state.approvedDigest=digest;
+  newAudit(state,'HUMAN_APPROVED',{method:'manual_button',automatic:false,bundleDigest:state.analysis.bundleDigest||null});
 }
 export function canCreateOrder(state) {
   if(!state.humanApproved||!state.analysis) throw new AppError('Human-approved evidence required before payment',403);
-  // Local integrity guard: a changed or stale analysis cannot inherit a previous approval.
-  // This is NOT buyer identity verification or authenticated file provenance.
-  const digest=state.analysis.bundleDigest||state.analysis.evidenceDigest;
-  if(!digest||state.approvedDigest!==digest ||
-    (state.analysis.evidenceDigest && sha256Hex(state.evidence)!==digest))
+  const digest=state.analysis.document?.sha256||state.analysis.bundleDigest||state.analysis.evidenceDigest;
+  if(!digest||state.approvedDigest!==digest||
+     (state.analysis.evidenceDigest&&sha256Hex(state.evidence)!==digest))
     throw new AppError('Evidence changed or approval is stale; analyze and approve again',409);
   if(bundleUnsatisfied(state.analysis)) throw new AppError('Evidence contract not satisfied',403);
   if(state.payment) throw new AppError('Payment order already exists',409);
@@ -218,6 +217,6 @@ export function canCreateOrder(state) {
 export function sanitizePublic(state) {
   const {milestone,evidence,analysis,agentAnalysis,humanApproved,payment,audit,sessionId}=state;
   return {milestone,evidence,analysis,agentAnalysis,humanApproved,
-    payment:payment?{id:payment.id,mode:payment.mode,status:payment.status}:null,
+    payment:payment?{id:payment.id,mode:payment.mode,status:payment.status,intent:payment.intent||'CAPTURE'}:null,
     audit:audit.slice(-35),sessionId};
 }

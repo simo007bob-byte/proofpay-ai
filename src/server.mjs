@@ -7,6 +7,7 @@ import { initialState, analyze, assessEvidence, humanApprove, canCreateOrder, sa
 import { PayPalSandbox } from './paypal.mjs';
 import { LocalAI } from './ai.mjs';
 import { EmbeddingAI } from './embedding-ai.mjs';
+import { inspectDocument, evaluateDocumentProof } from './document-proof.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const HTML = readFileSync(resolve(HERE,'../web/index.html'));
@@ -64,7 +65,7 @@ async function body(req){
   let text='';
   for await (const chunk of req) {
     text+=chunk;
-    if(text.length>12000) throw new AppError('Request too large',413);
+    if(text.length>(req.url==='/api/analyze-file'?1500000:12000)) throw new AppError('Request too large',413);
   }
   try{return JSON.parse(text||'{}');} catch {throw new AppError('Invalid JSON body');}
 }
@@ -101,7 +102,7 @@ export const server=http.createServer(async (req,res)=>{
     if(req.method==='GET' && path==='/api/state')return send(res,200,current());
     if(req.method!=='POST')return send(res,404,{error:'Not found'});
     assertOrigin(req);
-    if(['/api/approve','/api/create-order','/api/capture','/api/reset'].includes(path))
+    if(['/api/approve','/api/create-order','/api/capture','/api/reset','/api/create-authorization-order','/api/authorize-order','/api/capture-authorization','/api/void-authorization'].includes(path))
       requireBuyer(req);
     if(busy)throw new AppError('Another state update is in progress',409);
     busy=true;
@@ -124,11 +125,40 @@ export const server=http.createServer(async (req,res)=>{
         analyze(state,evidence,result);persist();
         return send(res,200,current());
       }
+      if(path==='/api/analyze-file'){
+        if(state.payment && !(state.payment.intent==='AUTHORIZE'&&state.payment.status==='AUTHORIZED'))
+          throw new AppError('Cannot review evidence after payment completion or before authorization',409);
+        const document=await inspectDocument(data);
+        const proof=evaluateDocumentProof(document);
+        let advice=null;
+        if(proof.status!=='REVIEW_REQUIRED'&&ai.enabled){
+          try{
+            advice=await ai.evaluate(state.milestone.task,
+              document.pages.map(p=>p.text).join('\n').slice(0,5000));
+          }catch(e){
+            if(!(e instanceof AppError)||![502,503].includes(e.status))throw e;
+            advice={provider:'DETERMINISTIC_FALLBACK',summary:'Local AI unavailable',
+              missing:[],risk:'unknown',authority:'Human approval mandatory'};
+          }
+        }
+        state.evidence='';
+        state.analysis=proof;
+        state.agentAnalysis=advice;
+        state.humanApproved=false;state.approvedDigest=null;
+        newAudit(state,'LOCAL_DOCUMENT_ANALYZED',{format:document.format,fileHash:document.sha256,
+          claims:proof.claims.map(c=>({id:c.id,status:c.status,page:c.page})),status:proof.status});
+        persist();
+        return send(res,200,current());
+      }
       if(path==='/api/approve'){
         humanApprove(state,data.approved);persist();
         return send(res,200,current());
       }
       if(path==='/api/create-order'){
+        // Retain the original demonstration API only for tests and mock-mode replay.
+        // It must never reach PayPal in the V4 authorize-first Sandbox workflow.
+        if(paypal.mode!=='SIMULATION_ONLY')
+          throw new AppError('Legacy immediate-capture checkout disabled in Sandbox V4',403);
         canCreateOrder(state);
         // Server controls currency and amount; never accept either from client.
         const order=await paypal.createOrder(state);
@@ -137,7 +167,10 @@ export const server=http.createServer(async (req,res)=>{
         persist();return send(res,200,current());
       }
       if(path==='/api/capture'){
-        if(!state.humanApproved||!state.payment)throw new AppError('Order missing',403);
+        if(paypal.mode!=='SIMULATION_ONLY')
+          throw new AppError('Legacy immediate capture disabled in Sandbox V4',403);
+        if(!state.humanApproved||!state.payment||state.payment.intent==='AUTHORIZE')
+          throw new AppError('Immediate-capture mock order missing',403);
         if(state.payment.status==='COMPLETED')throw new AppError('Already completed',409);
         if(data.orderId!==state.payment.id)throw new AppError('Order mismatch',409);
         // In real sandbox mode, only buyer approval via PayPal JS onApprove
@@ -147,6 +180,53 @@ export const server=http.createServer(async (req,res)=>{
         });
         state.payment.status=confirmed.status;
         newAudit(state,state.payment.mode==='SIMULATION_ONLY'?'SIMULATION_CAPTURE_COMPLETED':'PAYPAL_SANDBOX_CAPTURE_CONFIRMED',{mode:state.payment.mode});
+        persist();return send(res,200,current());
+      }
+      if(path==='/api/create-authorization-order') {
+        if(state.payment)throw new AppError('Payment order already exists',409);
+        const order=await paypal.createAuthorizationOrder(state);
+        state.payment={...order,createdAt:new Date().toISOString()};
+        newAudit(state,'AUTHORIZATION_ORDER_CREATED',{mode:order.mode,status:order.status,intent:'AUTHORIZE'});
+        persist();return send(res,200,current());
+      }
+      if(path==='/api/authorize-order') {
+        if(!state.payment||state.payment.intent!=='AUTHORIZE')
+          throw new AppError('Approved authorization order required',403);
+        if(!['CREATED','PAYER_ACTION_REQUIRED'].includes(state.payment.status))throw new AppError('Order already processed',409);
+        if(data.orderId!==state.payment.id)throw new AppError('Order mismatch',409);
+        const result=await paypal.authorizeOrder(state.payment,{
+          amount:state.milestone.amount,currency:state.milestone.currency
+        });
+        state.payment.status=result.status;state.payment.authorizationId=result.authorizationId;
+        // Authorization starts a NEW delivery window; stale pre-authorization files cannot be accepted.
+        state.humanApproved=false;state.approvedDigest=null;
+        state.analysis=null;state.agentAnalysis=null;state.evidence='';
+        newAudit(state,state.payment.mode==='SIMULATION_ONLY'?'SIMULATION_AUTHORIZED':'PAYPAL_SANDBOX_AUTHORIZED',
+          {verifiedBy:result.verifiedBy||'MOCK_ONLY'});
+        persist();return send(res,200,current());
+      }
+      if(path==='/api/capture-authorization') {
+        if(!state.humanApproved||state.analysis?.kind!=='DOCUMENT_PROOF'||
+          state.analysis.status!=='POTENTIALLY_MATCHES'||
+          !state.analysis.document?.sha256||
+          state.approvedDigest!==state.analysis.document.sha256||!state.payment||
+          state.payment.intent!=='AUTHORIZE'||state.payment.status!=='AUTHORIZED')
+          throw new AppError('Buyer must approve a supported PDF/TXT delivery after payment authorization',403);
+        const result=await paypal.captureAuthorization(state.payment,{
+          amount:state.milestone.amount,currency:state.milestone.currency
+        });
+        state.payment.status=result.status;
+        newAudit(state,state.payment.mode==='SIMULATION_ONLY'?'SIMULATION_CAPTURE_COMPLETED':'PAYPAL_AUTHORIZATION_CAPTURE_CONFIRMED',
+          {verifiedBy:result.verifiedBy||'MOCK_ONLY'});
+        persist();return send(res,200,current());
+      }
+      if(path==='/api/void-authorization') {
+        if(!state.payment||state.payment.intent!=='AUTHORIZE'||state.payment.status!=='AUTHORIZED')
+          throw new AppError('Active authorization required before void',403);
+        const result=await paypal.voidAuthorization(state.payment);
+        state.payment.status=result.status;
+        newAudit(state,state.payment.mode==='SIMULATION_ONLY'?'SIMULATION_AUTHORIZATION_VOIDED':'PAYPAL_AUTHORIZATION_VOIDED',
+          {verifiedBy:result.verifiedBy||'MOCK_ONLY'});
         persist();return send(res,200,current());
       }
       if(path==='/api/reset'){

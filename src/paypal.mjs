@@ -97,5 +97,102 @@ export class PayPalSandbox {
       captureId:receipt.captureId,verifiedBy:'PAYPAL_ORDER_GET'};
   }
 
+
+  async authorizedRequest(path,{method='GET',body,requestId}={}) {
+    const access=await this.token();
+    const headers={'Authorization':'Bearer '+access,'Accept':'application/json','Prefer':'return=representation'};
+    if(method!=='GET')headers['Content-Type']='application/json';
+    if(requestId)headers['PayPal-Request-Id']=requestId.slice(0,45);
+    const reply=await this.fetcher(SANDBOX+path,{
+      method,headers,...(body===undefined?{}:{body:JSON.stringify(body)}),signal:AbortSignal.timeout(15000)
+    });
+    const result=reply.status===204?{}:await reply.json().catch(()=>({}));
+    if(!reply.ok) throw new AppError('PayPal Sandbox authorization API failed',502);
+    return result;
+  }
+  async createAuthorizationOrder(state) {
+    if(this.mode==='SIMULATION_ONLY')
+      return {id:'MOCK-AUTH-ORDER-'+state.sessionId.slice(0,12),status:'CREATED',mode:this.mode,intent:'AUTHORIZE'};
+    const result=await this.authorizedRequest('/v2/checkout/orders',{
+      method:'POST',body:{intent:'AUTHORIZE',purchase_units:[{
+        reference_id:state.milestone.id,
+        description:'Approved milestone '+state.milestone.id,
+        amount:{currency_code:state.milestone.currency,value:state.milestone.amount}
+      }]},requestId:state.sessionId.slice(0,36)+'-a'
+    });
+    if(!/^[A-Z0-9]{8,30}$/.test(result.id||'')||!['CREATED','PAYER_ACTION_REQUIRED'].includes(result.status))
+      throw new AppError('Invalid PayPal authorization order',502);
+    const merchant=result.purchase_units?.[0]?.payee?.merchant_id||null;
+    return {id:result.id,status:result.status,mode:this.mode,intent:'AUTHORIZE',
+      payeeMerchantId:merchant};
+  }
+  assertAuthorization(order,data,expected) {
+    if(data?.id!==order.id||data?.status!=='COMPLETED'||data.purchase_units?.length!==1)
+      throw new AppError('PayPal Sandbox order is not authorized',502);
+    const unit=data.purchase_units[0],arr=unit?.payments?.authorizations;
+    if(!Array.isArray(arr)||arr.length!==1)
+      throw new AppError('Expected exactly one authorization',502);
+    const a=arr[0];
+    if(!/^[A-Z0-9]{8,40}$/.test(a.id||'')||!['CREATED','AUTHORIZED'].includes(a.status)||
+        a.amount?.currency_code!==expected.currency||
+        amountToMinor(a.amount?.value)!==amountToMinor(expected.amount)||
+        (order.payeeMerchantId&&unit.payee?.merchant_id!==order.payeeMerchantId))
+      throw new AppError('PayPal authorization amount or merchant mismatch',502);
+    return {authorizationId:a.id,merchantId:unit.payee?.merchant_id||null};
+  }
+  async authorizeOrder(order,expected) {
+    if(order.mode==='SIMULATION_ONLY')
+      return {status:'AUTHORIZED',authorizationId:'MOCK-AUTHORIZATION-001',mode:order.mode};
+    if(this.mode!=='PAYPAL_SANDBOX'||order.intent!=='AUTHORIZE')
+      throw new AppError('Not a PayPal Sandbox authorization order',409);
+    const result=await this.authorizedRequest('/v2/checkout/orders/'+order.id+'/authorize',{
+      method:'POST',body:{},requestId:'auth-'+order.id
+    });
+    const proof=this.assertAuthorization(order,result,expected);
+    const independently=await this.authorizedRequest('/v2/checkout/orders/'+order.id);
+    const checked=this.assertAuthorization(order,independently,expected);
+    if(proof.authorizationId!==checked.authorizationId||proof.merchantId!==checked.merchantId)
+      throw new AppError('PayPal authorization readback mismatch',502);
+    return {status:'AUTHORIZED',authorizationId:proof.authorizationId,mode:order.mode,
+      verifiedBy:'PAYPAL_ORDER_GET'};
+  }
+  async captureAuthorization(order,expected) {
+    if(order.mode==='SIMULATION_ONLY')
+      return {status:'COMPLETED',captureId:'MOCK-AUTH-CAPTURE-001',mode:order.mode};
+    if(order.intent!=='AUTHORIZE'||order.status!=='AUTHORIZED'||
+       !/^[A-Z0-9]{8,40}$/.test(order.authorizationId||''))
+      throw new AppError('Active PayPal authorization required',409);
+    const path='/v2/payments/authorizations/'+order.authorizationId;
+    const result=await this.authorizedRequest(path+'/capture',{
+      method:'POST',body:{amount:{currency_code:expected.currency,value:expected.amount},
+        final_capture:true},requestId:'cap-auth-'+order.authorizationId
+    });
+    const check=data=>{
+      if(!/^[A-Z0-9]{8,40}$/.test(data?.id||'')||data.status!=='COMPLETED'||
+        data.amount?.currency_code!==expected.currency||
+        amountToMinor(data.amount.value)!==amountToMinor(expected.amount))
+        throw new AppError('PayPal authorization capture receipt mismatch',502);
+      return data.id;
+    };
+    const id=check(result);
+    const readback=await this.authorizedRequest('/v2/payments/captures/'+id);
+    if(check(readback)!==id)
+      throw new AppError('PayPal captured payment readback mismatch',502);
+    return {status:'COMPLETED',captureId:id,verifiedBy:'PAYPAL_CAPTURE_GET',mode:order.mode};
+  }
+  async voidAuthorization(order) {
+    if(order.mode==='SIMULATION_ONLY')
+      return {status:'VOIDED',verifiedBy:'MOCK_ONLY',mode:order.mode};
+    if(order.intent!=='AUTHORIZE'||order.status!=='AUTHORIZED'||
+       !/^[A-Z0-9]{8,40}$/.test(order.authorizationId||''))
+      throw new AppError('Active PayPal authorization required',409);
+    const path='/v2/payments/authorizations/'+order.authorizationId;
+    await this.authorizedRequest(path+'/void',{method:'POST',body:{},requestId:'void-auth-'+order.authorizationId});
+    const verified=await this.authorizedRequest(path);
+    if(verified?.id!==order.authorizationId||verified.status!=='VOIDED')
+      throw new AppError('PayPal void readback not confirmed',502);
+    return {status:'VOIDED',verifiedBy:'PAYPAL_AUTHORIZATION_GET',mode:order.mode};
+  }
+
 }
 export const SANDBOX_ORIGIN=SANDBOX;

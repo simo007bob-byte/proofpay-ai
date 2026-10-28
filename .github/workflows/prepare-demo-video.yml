@@ -1,0 +1,28 @@
+name: Prepare ProofPay video with audible narration
+on:
+  push:
+    paths:
+      - '.github/workflows/prepare-demo-video.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  audio:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Normalize the original demo's quiet audio, without editing footage
+        run: |
+          ffmpeg -hide_banner -loglevel error -y \
+            -i release/ProofPay_AI_Hackathon_Judge_Video_2m15s.mp4 \
+            -map 0:v:0 -map 0:a:0 -c:v copy \
+            -af 'loudnorm=I=-16:TP=-1.5:LRA=11' -c:a aac -b:a 192k \
+            ProofPay_AI_Hackathon_Judge_Video_AUDIO_FIXED_20261028.mp4
+          ffprobe -v error -show_entries format=duration,size \
+            -of default=noprint_wrappers=1 ProofPay_AI_Hackathon_Judge_Video_AUDIO_FIXED_20261028.mp4
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ProofPay-Audio-Fixed-2026-10-28
+          path: ProofPay_AI_Hackathon_Judge_Video_AUDIO_FIXED_20261028.mp4
+          retention-days: 14

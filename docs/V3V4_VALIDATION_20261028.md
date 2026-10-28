@@ -10,17 +10,15 @@ This branch is **development only**. Public Devpost and YouTube remain unchanged
 - In default no-credential mode every payment action is explicitly simulated. There are **no live charges** in this branch.
 - Server logs store document hash and claim statuses, not uploaded PDF bytes or full document body.
 
+## Corrected payment state machine and refusal tests
+The buyer authorization now happens **before** supplier delivery. Uploading a newer document invalidates any prior buyer acceptance. Capture is blocked until the buyer accepts an analyzed PDF/TXT after authorization. The buyer can void the authorized hold before capture without supplier delivery. The local Chrome test passed the correct event order with both the capture and void branches. An additional fail-closed rule blocks a copied single-line checklist, and a later-page contradiction overrides an earlier apparent match. After those changes the full Linux suite had **87 passed / 0 failed**, and the prior GitHub PR had already passed its first 85-test CI snapshot; the new head must pass CI again.
+
 ## Completed automated checks
-- `npm test`: **85 tests passed / 0 failed** in Node 22 Linux on 28 October 2026.
+- `npm test`: **87 tests passed / 0 failed** in Node 22 Linux on 28 October 2026.
 - The 40 hand-labeled examples in `test/document-proof.test.mjs` all matched expected statuses. This measures **deterministic synthetic rule behavior**, not accuracy on independent or authentic documents.
 - Synthetic valid PDF successfully parsed with real PDF.js library.
 - Browser automation with Chromium: upload TXT, inspect evidence quotes, enter separate buyer token, manually approve, create **simulated** authorization, simulated capture, reset, simulated void; no JS page errors. Screenshots stored temporarily on the server.
 - PayPal backend positive/negative API cases covered by mock fetcher; wrong merchant, amount, currency, ambiguous receipt, readback mismatch and double capture rejected in tests.
-
-## Additional Windows laptop check (28 October 2026)
-- Clean temporary unpack on Windows with Node 24.19.0 and `npm ci` succeeded; `node --test` excluding the live MiniLM model download **passed 84/84**.
-- The full Windows run was not accepted as green: the first-run transformer model cache could not be renamed (`EPERM` while the test worker was being stopped). A controlled repeat with a complete local cache is required. This does **not** invalidate the independent full GitHub CI, but Windows AI readiness remains open.
-- No Sandbox merchant credentials were configured in that test environment; all payment actions were mocked or simulated.
 
 ## Not yet verified – release-blocking
 - No **new** actual PayPal Sandbox AUTHORIZE / CAPTURE / VOID run on this branch. Prior ProofPay Sandbox CAPTURE from 27 October concerns the **old immediate CAPTURE implementation**, not these new methods.

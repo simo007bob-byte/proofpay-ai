@@ -12,6 +12,7 @@
     "node": ">=20"
   },
   "dependencies": {
-    "@huggingface/transformers": "4.3.1"
+    "@huggingface/transformers": "4.3.1",
+    "pdfjs-dist": "^5.4.624"
   }
 }

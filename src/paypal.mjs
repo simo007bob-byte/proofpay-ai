@@ -1,4 +1,5 @@
 import { AppError } from './core.mjs';
+import { amountToMinor } from './payment-events.mjs';
 
 const SANDBOX = 'https://api-m.sandbox.paypal.com';
 
@@ -40,24 +41,61 @@ export class PayPalSandbox {
     });
     const data=await response.json().catch(()=>({}));
     if(!response.ok || !data.id) throw new AppError('PayPal sandbox order rejected',502);
-    return {id:data.id,status:data.status,mode:this.mode};
+    return {id:data.id,status:data.status,mode:this.mode,
+      payeeMerchantId:data.purchase_units?.[0]?.payee?.merchant_id||null};
   }
-  async captureOrder(order) {
+  // Validate the provider's full receipt, not merely the top-level COMPLETED flag.
+  assertReceipt(data, order, expected, captureId=null) {
+    if(data?.id!==order.id || data?.status!=='COMPLETED' ||
+       !Array.isArray(data.purchase_units) || data.purchase_units.length!==1)
+      throw new AppError('PayPal sandbox did not confirm capture',502);
+    const unit=data.purchase_units[0];
+    const captures=unit?.payments?.captures;
+    if(!Array.isArray(captures) || captures.length!==1)
+      throw new AppError('PayPal capture receipt missing or ambiguous',502);
+    const capture=captures[0];
+    if(!/^[A-Z0-9]{8,40}$/.test(capture?.id||'') ||
+       (captureId!==null && capture.id!==captureId) ||
+       capture.status!=='COMPLETED' ||
+       capture.amount?.currency_code!==expected.currency ||
+       amountToMinor(capture.amount?.value)!==amountToMinor(expected.amount))
+      throw new AppError('PayPal capture receipt does not match the approved amount',502);
+    // Payee binding is enforced whenever the creation response identifies the merchant.
+    if(order.payeeMerchantId && unit?.payee?.merchant_id!==order.payeeMerchantId)
+      throw new AppError('PayPal capture merchant mismatch',502);
+    return {captureId:capture.id,payeeMerchantId:unit?.payee?.merchant_id||null};
+  }
+  async captureOrder(order,expected) {
     if(order.mode==='SIMULATION_ONLY')
       return {id:'MOCK-CAPTURE',status:'COMPLETED',mode:order.mode};
     if(this.mode!=='PAYPAL_SANDBOX') throw new AppError('Sandbox mode changed',409);
     if(!/^[A-Z0-9]{8,30}$/.test(order.id)) throw new AppError('Invalid PayPal order ID',400);
-    const token=await this.token();
+    if(!expected || !/^[A-Z]{3}$/.test(expected.currency||'') ||
+       amountToMinor(expected.amount)===null || amountToMinor(expected.amount)<=0)
+      throw new AppError('Expected approved amount and currency required',422);
+    const access=await this.token();
     const reply=await this.fetcher(SANDBOX+'/v2/checkout/orders/'+order.id+'/capture',{
       method:'POST',headers:{
-        'Content-Type':'application/json','Authorization':'Bearer '+token,
+        'Content-Type':'application/json','Authorization':'Bearer '+access,
         'PayPal-Request-Id':('capture-'+order.id).slice(0,45)
       },body:'{}',signal:AbortSignal.timeout(15000)
     });
     const data=await reply.json().catch(()=>({}));
-    if(!reply.ok || data.id!==order.id || data.status!=='COMPLETED')
-      throw new AppError('PayPal sandbox did not confirm capture',502);
-    return {id:order.id,status:'COMPLETED',mode:order.mode};
+    if(!reply.ok) throw new AppError('PayPal sandbox did not confirm capture',502);
+    const receipt=this.assertReceipt(data,order,expected);
+    // An independent GET protects against accepting only the capture response.
+    const verified=await this.fetcher(SANDBOX+'/v2/checkout/orders/'+order.id,{
+      method:'GET',headers:{Authorization:'Bearer '+access},
+      signal:AbortSignal.timeout(15000)
+    });
+    if(!verified.ok) throw new AppError('PayPal capture readback failed',502);
+    const readback=await verified.json().catch(()=>({}));
+    const second=this.assertReceipt(readback,order,expected,receipt.captureId);
+    if(receipt.payeeMerchantId && second.payeeMerchantId!==receipt.payeeMerchantId)
+      throw new AppError('PayPal capture merchant mismatch',502);
+    return {id:order.id,status:'COMPLETED',mode:order.mode,
+      captureId:receipt.captureId,verifiedBy:'PAYPAL_ORDER_GET'};
   }
+
 }
 export const SANDBOX_ORIGIN=SANDBOX;

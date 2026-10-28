@@ -36,6 +36,6 @@ test('Blocks work after an order has been created',()=>{
   humanApprove(state,true);
   state.payment={id:'MOCK',status:'CREATED'};
   assert.throws(()=>analyze(state,'new evidence'),/locked/);
-  assert.throws(()=>humanApprove(state,true),/already exists/);
+  assert.throws(()=>humanApprove(state,true),/finalized|not authorized/);
   assert.throws(()=>canCreateOrder(state),/already exists/);
 });

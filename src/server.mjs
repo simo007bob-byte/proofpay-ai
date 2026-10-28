@@ -155,6 +155,10 @@ export const server=http.createServer(async (req,res)=>{
         return send(res,200,current());
       }
       if(path==='/api/create-order'){
+        // Retain the original demonstration API only for tests and mock-mode replay.
+        // It must never reach PayPal in the V4 authorize-first Sandbox workflow.
+        if(paypal.mode!=='SIMULATION_ONLY')
+          throw new AppError('Legacy immediate-capture checkout disabled in Sandbox V4',403);
         canCreateOrder(state);
         // Server controls currency and amount; never accept either from client.
         const order=await paypal.createOrder(state);
@@ -163,7 +167,10 @@ export const server=http.createServer(async (req,res)=>{
         persist();return send(res,200,current());
       }
       if(path==='/api/capture'){
-        if(!state.humanApproved||!state.payment)throw new AppError('Order missing',403);
+        if(paypal.mode!=='SIMULATION_ONLY')
+          throw new AppError('Legacy immediate capture disabled in Sandbox V4',403);
+        if(!state.humanApproved||!state.payment||state.payment.intent==='AUTHORIZE')
+          throw new AppError('Immediate-capture mock order missing',403);
         if(state.payment.status==='COMPLETED')throw new AppError('Already completed',409);
         if(data.orderId!==state.payment.id)throw new AppError('Order mismatch',409);
         // In real sandbox mode, only buyer approval via PayPal JS onApprove

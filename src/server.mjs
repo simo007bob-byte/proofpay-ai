@@ -126,7 +126,8 @@ export const server=http.createServer(async (req,res)=>{
         return send(res,200,current());
       }
       if(path==='/api/analyze-file'){
-        if(state.payment)throw new AppError('Payment order already exists',409);
+        if(state.payment && !(state.payment.intent==='AUTHORIZE'&&state.payment.status==='AUTHORIZED'))
+          throw new AppError('Cannot review evidence after payment completion or before authorization',409);
         const document=await inspectDocument(data);
         const proof=evaluateDocumentProof(document);
         let advice=null;
@@ -175,14 +176,14 @@ export const server=http.createServer(async (req,res)=>{
         persist();return send(res,200,current());
       }
       if(path==='/api/create-authorization-order') {
-        canCreateOrder(state);
+        if(state.payment)throw new AppError('Payment order already exists',409);
         const order=await paypal.createAuthorizationOrder(state);
         state.payment={...order,createdAt:new Date().toISOString()};
         newAudit(state,'AUTHORIZATION_ORDER_CREATED',{mode:order.mode,status:order.status,intent:'AUTHORIZE'});
         persist();return send(res,200,current());
       }
       if(path==='/api/authorize-order') {
-        if(!state.humanApproved||!state.payment||state.payment.intent!=='AUTHORIZE')
+        if(!state.payment||state.payment.intent!=='AUTHORIZE')
           throw new AppError('Approved authorization order required',403);
         if(!['CREATED','PAYER_ACTION_REQUIRED'].includes(state.payment.status))throw new AppError('Order already processed',409);
         if(data.orderId!==state.payment.id)throw new AppError('Order mismatch',409);
@@ -190,13 +191,16 @@ export const server=http.createServer(async (req,res)=>{
           amount:state.milestone.amount,currency:state.milestone.currency
         });
         state.payment.status=result.status;state.payment.authorizationId=result.authorizationId;
+        state.humanApproved=false;
         newAudit(state,state.payment.mode==='SIMULATION_ONLY'?'SIMULATION_AUTHORIZED':'PAYPAL_SANDBOX_AUTHORIZED',
           {verifiedBy:result.verifiedBy||'MOCK_ONLY'});
         persist();return send(res,200,current());
       }
       if(path==='/api/capture-authorization') {
-        if(!state.humanApproved||!state.payment||state.payment.intent!=='AUTHORIZE'||
-          state.payment.status!=='AUTHORIZED')throw new AppError('Active buyer-approved authorization required',403);
+        if(!state.humanApproved||state.analysis?.kind!=='DOCUMENT_PROOF'||
+          state.analysis.status!=='POTENTIALLY_MATCHES'||!state.payment||
+          state.payment.intent!=='AUTHORIZE'||state.payment.status!=='AUTHORIZED')
+          throw new AppError('Buyer must approve a supported PDF/TXT delivery after payment authorization',403);
         const result=await paypal.captureAuthorization(state.payment,{
           amount:state.milestone.amount,currency:state.milestone.currency
         });

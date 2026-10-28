@@ -39,3 +39,17 @@ test('Blocks work after an order has been created',()=>{
   assert.throws(()=>humanApprove(state,true),/already exists/);
   assert.throws(()=>canCreateOrder(state),/already exists/);
 });
+
+test('Approval is bound to the exact analyzed evidence, not just an approval flag',()=>{
+  const state=initialState();
+  analyze(state,'Delivered municipal sweeper export tender analysis with cited sources and technical specifications.');
+  humanApprove(state,true);
+  assert.doesNotThrow(()=>canCreateOrder(state));
+  state.evidence+=' after-approval tampering';
+  assert.throws(()=>canCreateOrder(state),/Evidence changed or approval is stale/);
+  analyze(state,'Updated municipal sweeper export tender analysis with cited sources and technical specifications.');
+  assert.equal(state.humanApproved,false);
+  assert.throws(()=>canCreateOrder(state),/Human-approved/);
+  humanApprove(state,true);
+  assert.doesNotThrow(()=>canCreateOrder(state));
+});

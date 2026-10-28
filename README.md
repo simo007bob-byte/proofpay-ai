@@ -60,6 +60,11 @@ See `docs/PAYPAL_SANDBOX_VALIDATION.md` for a truth-preserving validation matrix
 
 The backend uses POST https://api-m.sandbox.paypal.com/v1/oauth2/token, POST /v2/checkout/orders and POST /v2/checkout/orders/{id}/capture. Amounts are fixed on the merchant side, and requests carry PayPal idempotency identifiers. Credentials are never returned to the browser.
 
+## Sandbox receipt validation (28 October 2026)
+The capture endpoint now fails closed unless PayPal returns a completed capture with the exact approved amount and currency, a capture identifier, the expected order identifier and (when returned at order creation) the expected merchant. After capture, the server independently retrieves the order through PayPal Orders v2 GET and requires the same completed capture and amount. These checks reject malformed, ambiguous and contradictory API receipts instead of trusting the top-level payment status alone.
+
+**Verification boundary:** The updated receipt-validation code passed 60/60 automated tests on 28 October 2026, including negative mocked PayPal responses for altered amounts, currencies, merchants and capture IDs. The updated path has **not** been rerun against a live PayPal Developer Sandbox after this change; the genuine buyer-approved Sandbox capture described above was independently verified on 27 October 2026 with the earlier adapter. Automated tests never move money. This remains a loopback-only demonstration, not a production payment system.
+
 ## Safe credentials handling
 - Use only Sandbox credentials, never production ones.
 - Keep credentials in environment variables only. Never commit .env files, and never paste credentials into chat, Telegram, GitHub issues, screenshots or video.

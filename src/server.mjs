@@ -91,7 +91,16 @@ export const server=http.createServer(async (req,res)=>{
         const evidence=String(data.evidence||'');
         // Evidence is untrusted and never allowed to mutate our instructions.
         const prescreen=assessEvidence(state.milestone.task,evidence);
-        const result=prescreen.status==='REVIEW_REQUIRED'?null:await ai.evaluate(state.milestone.task,evidence);
+        let result=null;
+        if(prescreen.status!=='REVIEW_REQUIRED') {
+          try { result=await ai.evaluate(state.milestone.task,evidence); }
+          catch (e) {
+            if(!(e instanceof AppError) || ![502,503].includes(e.status))throw e;
+            result={provider:'DETERMINISTIC_FALLBACK',risk:'unknown',
+              summary:'Local semantic model unavailable; only deterministic keyword checking completed.',
+              authority:'Advisory only. Model failure is not proof of delivery.'};
+          }
+        }
         analyze(state,evidence,result);persist();
         return send(res,200,current());
       }
@@ -117,12 +126,16 @@ export const server=http.createServer(async (req,res)=>{
           currency:state.milestone.currency,amount:state.milestone.amount
         });
         state.payment.status=confirmed.status;
-        newAudit(state,'SANDBOX_CAPTURE_CONFIRMED',{mode:state.payment.mode});
+        newAudit(state,state.payment.mode==='SIMULATION_ONLY'?'SIMULATION_CAPTURE_COMPLETED':'PAYPAL_SANDBOX_CAPTURE_CONFIRMED',{mode:state.payment.mode});
         persist();return send(res,200,current());
       }
       if(path==='/api/reset'){
         if(data.confirm!==true)throw new AppError('Explicit demo reset required',422);
-        state=initialState();persist();return send(res,200,current());
+        const priorAudit=state.audit.slice(-100);
+        state=initialState();
+        state.audit=[...priorAudit,...state.audit];
+        newAudit(state,'DEMO_RESET',{priorEventsPreserved:priorAudit.length});
+        persist();return send(res,200,current());
       }
       return send(res,404,{error:'Not found'});
     }finally{busy=false;}

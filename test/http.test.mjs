@@ -61,11 +61,14 @@ test('Complete HTTP lifecycle: analyze, manually approve, create mock order, cap
   res=await request('/api/capture',{orderId:order});
   assert.equal(res.status,200);
   assert.equal(res.body.state.payment.status,'COMPLETED');
+  assert.equal(res.body.state.audit.at(-1).action,'SIMULATION_CAPTURE_COMPLETED');
   res=await request('/api/capture',{orderId:order});
   assert.equal(res.status,409);
   res=await request('/api/reset',{confirm:true});
   assert.equal(res.status,200);
   assert.equal(res.body.state.payment,null);
+  assert.ok(res.body.state.audit.some(e=>e.action==='SIMULATION_CAPTURE_COMPLETED'),'reset must retain simulation audit history');
+  assert.equal(res.body.state.audit.at(-1).action,'DEMO_RESET');
   res=await request('/api/state');
   assert.equal(res.status,200);
   assert.equal(res.body.capabilities.payments,'SIMULATION_ONLY');

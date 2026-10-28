@@ -1,0 +1,25 @@
+name: ProofPay Judge Reproducibility
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      AI_PROVIDER: EMBEDDINGS
+      PAYPAL_CLIENT_ID: ""
+      PAYPAL_CLIENT_SECRET: ""
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - name: Install from lockfile
+        run: npm ci --no-audit --no-fund
+      - name: Run full unit, HTTP, and local transformer tests
+        run: npm test

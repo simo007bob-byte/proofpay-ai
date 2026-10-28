@@ -208,6 +208,6 @@ export function canCreateOrder(state) {
 export function sanitizePublic(state) {
   const {milestone,evidence,analysis,agentAnalysis,humanApproved,payment,audit,sessionId}=state;
   return {milestone,evidence,analysis,agentAnalysis,humanApproved,
-    payment:payment?{id:payment.id,mode:payment.mode,status:payment.status}:null,
+    payment:payment?{id:payment.id,mode:payment.mode,status:payment.status,intent:payment.intent||'CAPTURE'}:null,
     audit:audit.slice(-35),sessionId};
 }
